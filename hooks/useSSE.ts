@@ -42,7 +42,6 @@ export function useSSE({
   const maxReconnectAttempts = 3;
   const isManuallyClosedRef = useRef(false);
   const mountedRef = useRef(true);
-  const pollingIntervalRef = useRef<NodeJS.Timeout>();
   const isInitializedRef = useRef(false);
 
   const cleanup = useCallback(() => {
@@ -56,33 +55,8 @@ export function useSSE({
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = undefined;
     }
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = undefined;
-    }
   }, []);
 
-  // Simplified polling mechanism
-  const startPolling = useCallback(() => {
-    if (!outletId || !mountedRef.current || pollingIntervalRef.current) return;
-
-    console.log('Starting polling mechanism for order updates');
-    
-    // Immediately set connected status
-    setIsConnected(true);
-    setConnectionStatus('connected');
-    if (onConnect) onConnect();
-
-    // Simple polling - just maintain connection status
-    pollingIntervalRef.current = setInterval(() => {
-      if (!mountedRef.current) return;
-      
-      // Keep connection alive
-      console.log('Polling heartbeat');
-    }, 30000); // Poll every 30 seconds
-  }, [outletId, onConnect]);
-
-  // Try SSE connection first, fallback to polling
   const connect = useCallback(() => {
     if (!mountedRef.current || !outletId || isInitializedRef.current) return;
     
@@ -91,25 +65,13 @@ export function useSSE({
     
     console.log('Attempting connection for outlet:', outletId);
 
-    // Try SSE first
     try {
       const url = `/api/orders/stream?outletId=${outletId}`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
-      // Set a timeout to fallback to polling if SSE doesn't connect quickly
-      const sseTimeout = setTimeout(() => {
-        if (!isConnected && mountedRef.current) {
-          console.log('SSE timeout, falling back to polling');
-          cleanup();
-          startPolling();
-        }
-      }, 5000); // 5 second timeout
-
       eventSource.onopen = () => {
         if (!mountedRef.current) return;
-        
-        clearTimeout(sseTimeout);
         console.log('SSE connection opened');
         setIsConnected(true);
         setConnectionStatus('connected');
@@ -161,26 +123,15 @@ export function useSSE({
 
       eventSource.onerror = (error) => {
         if (!mountedRef.current) return;
-        
-        clearTimeout(sseTimeout);
-        console.log('SSE connection error, falling back to polling');
-        
+        console.log('SSE connection error');
         setIsConnected(false);
         cleanup();
-        
-        // Fallback to polling immediately
-        if (!isManuallyClosedRef.current) {
-          startPolling();
-        }
       };
 
     } catch (error) {
-      console.error('Error creating SSE connection, falling back to polling:', error);
-      if (mountedRef.current) {
-        startPolling();
-      }
+      console.error('Error creating SSE connection:', error);
     }
-  }, [outletId, onNewOrder, onOrderUpdate, onOrderComplete, onError, onConnect, cleanup, startPolling, isConnected]);
+  }, [outletId, onNewOrder, onOrderUpdate, onOrderComplete, onError, onConnect, cleanup]);
 
   const disconnect = useCallback(() => {
     console.log('Manually disconnecting');

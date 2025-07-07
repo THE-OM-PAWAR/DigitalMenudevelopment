@@ -63,6 +63,14 @@ export async function GET(request: NextRequest) {
             } catch (error) {
               console.error('Error enqueueing data:', error);
               isClosed = true;
+              if (changeStream) {
+                try {
+                  changeStream.removeAllListeners();
+                  changeStream.close();
+                } catch (e) {
+                  console.error('Error closing change stream after enqueue error:', e);
+                }
+              }
             }
           }
         };
@@ -191,6 +199,7 @@ export async function GET(request: NextRequest) {
           isClosed = true;
           if (changeStream) {
             try {
+              changeStream.removeAllListeners();
               changeStream.close();
             } catch (error) {
               console.error('Error closing change stream:', error);
