@@ -192,4 +192,4 @@ export function useSSE({
     reconnectAttempts: reconnectAttemptsRef.current,
     maxReconnectAttempts
   };
-}
+} 
