@@ -35,13 +35,74 @@ export function useSSE({
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
   const [lastMessage, setLastMessage] = useState<SSEMessage | null>(null);
+  const [usePolling, setUsePolling] = useState(false);
   
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const pollingIntervalRef = useRef<NodeJS.Timeout>();
   const reconnectAttemptsRef = useRef(0);
+  const lastOrderCheckRef = useRef<string>('');
   const maxReconnectAttempts = 5;
   const isManuallyClosedRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // Polling function to check for order updates
+  const pollForUpdates = useCallback(async () => {
+    if (!outletId || !mountedRef.current) return;
+
+    try {
+      // Check if there's an active order to poll for
+      const activeOrderData = localStorage.getItem(`activeOrder-${outletId}`);
+      if (!activeOrderData) return;
+
+      const activeOrder = JSON.parse(activeOrderData);
+      const response = await fetch(`/api/orders/${activeOrder.orderId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const updatedOrder = data.order;
+        
+        // Check if order has been updated since last check
+        const orderKey = `${updatedOrder.orderId}-${updatedOrder.timestamps.updated}`;
+        if (orderKey !== lastOrderCheckRef.current) {
+          lastOrderCheckRef.current = orderKey;
+          
+          // Determine the type of update
+          if (updatedOrder.orderStatus === 'served' && updatedOrder.paymentStatus === 'paid') {
+            if (onOrderComplete) onOrderComplete(updatedOrder);
+          } else {
+            if (onOrderUpdate) onOrderUpdate(updatedOrder);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Polling error:', error);
+    }
+  }, [outletId, onOrderUpdate, onOrderComplete]);
+
+  // Start polling mechanism
+  const startPolling = useCallback(() => {
+    if (!mountedRef.current || pollingIntervalRef.current) return;
+    
+    console.log('Starting polling mechanism for order updates');
+    setUsePolling(true);
+    setIsConnected(true);
+    setConnectionStatus('connected');
+    
+    if (onConnect) onConnect();
+    
+    // Poll every 5 seconds
+    pollingIntervalRef.current = setInterval(pollForUpdates, 5000);
+  }, [pollForUpdates, onConnect]);
+
+  // Stop polling mechanism
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = undefined;
+    }
+    setUsePolling(false);
+  }, []);
 
   const cleanup = useCallback(() => {
     if (eventSourceRef.current) {
@@ -54,13 +115,14 @@ export function useSSE({
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = undefined;
     }
-  }, []);
+    stopPolling();
+  }, [stopPolling]);
 
   const connect = useCallback(() => {
     // Don't connect if component is unmounted or already connecting
     if (!mountedRef.current || !outletId || eventSourceRef.current) return;
 
-    console.log('Establishing SSE connection for outlet:', outletId);
+    console.log('Attempting SSE connection for outlet:', outletId);
     isManuallyClosedRef.current = false;
     
     try {
@@ -68,12 +130,23 @@ export function useSSE({
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
+      // Set a timeout to detect if SSE is not supported (like on Vercel)
+      const sseTimeoutRef = setTimeout(() => {
+        if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.OPEN) {
+          console.log('SSE connection timeout, falling back to polling');
+          cleanup();
+          startPolling();
+        }
+      }, 10000); // 10 second timeout
+
       eventSource.onopen = () => {
         if (!mountedRef.current) return;
         
+        clearTimeout(sseTimeoutRef);
         console.log('SSE connection opened');
         setIsConnected(true);
         setConnectionStatus('connected');
+        setUsePolling(false);
         reconnectAttemptsRef.current = 0;
         if (onConnect) onConnect();
       };
@@ -129,10 +202,31 @@ export function useSSE({
       eventSource.onerror = (error) => {
         if (!mountedRef.current) return;
         
+        clearTimeout(sseTimeoutRef);
         console.error('SSE connection error:', error);
         setIsConnected(false);
         
-        if (!isManuallyClosedRef.current && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        // Check if this is a 501 error (SSE not supported)
+        if (eventSource.readyState === EventSource.CLOSED) {
+          // Try to fetch the endpoint to check if it returns 501
+          fetch(url)
+            .then(response => {
+              if (response.status === 501) {
+                console.log('SSE not supported on this platform, using polling');
+                cleanup();
+                startPolling();
+                return;
+              }
+            })
+            .catch(() => {
+              // If fetch fails, also fall back to polling
+              console.log('SSE endpoint not accessible, using polling');
+              cleanup();
+              startPolling();
+            });
+        }
+        
+        if (!isManuallyClosedRef.current && reconnectAttemptsRef.current < maxReconnectAttempts && !usePolling) {
           setConnectionStatus('reconnecting');
           if (onDisconnect) onDisconnect();
           
@@ -153,8 +247,12 @@ export function useSSE({
               }
             }, 500);
           }, delay);
+        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts && !usePolling) {
+          console.log('Max SSE reconnection attempts reached, falling back to polling');
+          cleanup();
+          startPolling();
         } else {
-          console.log('Max SSE reconnection attempts reached or manually closed');
+          console.log('SSE manually closed or using polling');
           setConnectionStatus('disconnected');
         }
       };
@@ -164,12 +262,14 @@ export function useSSE({
       if (mountedRef.current) {
         setIsConnected(false);
         setConnectionStatus('disconnected');
+        // Fall back to polling on any SSE creation error
+        startPolling();
       }
     }
-  }, [outletId, onNewOrder, onOrderUpdate, onOrderComplete, onError, onConnect, onDisconnect, cleanup]);
+  }, [outletId, onNewOrder, onOrderUpdate, onOrderComplete, onError, onConnect, onDisconnect, cleanup, startPolling, usePolling]);
 
   const disconnect = useCallback(() => {
-    console.log('Manually disconnecting SSE');
+    console.log('Manually disconnecting SSE/Polling');
     cleanup();
     if (mountedRef.current) {
       setIsConnected(false);
@@ -178,7 +278,7 @@ export function useSSE({
   }, [cleanup]);
 
   const reconnect = useCallback(() => {
-    console.log('Manual SSE reconnection requested');
+    console.log('Manual reconnection requested');
     reconnectAttemptsRef.current = 0;
     cleanup();
     
@@ -219,7 +319,7 @@ export function useSSE({
 
   // Connection health check (reduced frequency)
   useEffect(() => {
-    if (!isConnected || !mountedRef.current) return;
+    if (!isConnected || !mountedRef.current || usePolling) return;
 
     const healthCheckInterval = setInterval(() => {
       if (!mountedRef.current) return;
@@ -233,7 +333,7 @@ export function useSSE({
     }, 60000); // Check every minute
 
     return () => clearInterval(healthCheckInterval);
-  }, [isConnected, reconnect]);
+  }, [isConnected, reconnect, usePolling]);
 
   return {
     isConnected,
@@ -242,6 +342,7 @@ export function useSSE({
     reconnect,
     disconnect,
     reconnectAttempts: reconnectAttemptsRef.current,
-    maxReconnectAttempts
+    maxReconnectAttempts,
+    usePolling
   };
 }

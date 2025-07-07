@@ -11,11 +11,12 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, Dr
 import { Separator } from '@/components/ui/separator';
 import { 
   Store, Search, Leaf, Beef, MapPin, Phone, 
-  ChefHat, Utensils, Star, Clock, Grid3X3, Plus, Minus, ShoppingCart, History, Wifi, WifiOff
+  ChefHat, Utensils, Star, Clock, Grid3X3, Plus, Minus, ShoppingCart, History, Wifi, WifiOff, Radio
 } from 'lucide-react';
 import ThemeProvider from '@/components/ThemeProvider';
 import OrderCart from '@/components/OrderCart';
 import { OrderItem } from '@/lib/orderTypes';
+import { useOrderSync } from '@/hooks/useOrderSync';
 import axios from 'axios';
 
 interface Outlet {
@@ -70,6 +71,17 @@ export default function PublicMenuPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [error, setError] = useState<string>('');
+
+  // Initialize order sync for real-time updates
+  const { isConnected, usePolling, connectionStatus } = useOrderSync({
+    outletId: outletId || '',
+    onOrderUpdate: (order) => {
+      console.log('Order updated:', order.orderId, order.orderStatus);
+    },
+    onOrderComplete: (order) => {
+      console.log('Order completed:', order.orderId);
+    }
+  });
 
   useEffect(() => {
     if (outletId) {
@@ -204,6 +216,9 @@ export default function PublicMenuPage() {
     return acc;
   }, {} as Record<string, { category: Category; items: Item[] }>);
 
+  // Check if orders can be placed (either connected via SSE or using polling)
+  const canPlaceOrders = outlet?.orderManagementEnabled && (isConnected || usePolling);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -248,6 +263,36 @@ export default function PublicMenuPage() {
   return (
     <ThemeProvider themeId={outlet.theme || 'modern'}>
       <div className="min-h-screen" style={{ backgroundColor: 'var(--theme-background)', color: 'var(--theme-text)' }}>
+        {/* Connection Status Indicator - Only show if order management is enabled */}
+        {outlet.orderManagementEnabled && (
+          <div className="fixed top-4 right-4 z-50">
+            <div className={`flex items-center space-x-2 px-3 py-2 rounded-full text-sm font-medium ${
+              connectionStatus === 'connected' 
+                ? 'bg-green-100 text-green-800' 
+                : connectionStatus === 'reconnecting'
+                ? 'bg-yellow-100 text-yellow-800'
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {connectionStatus === 'connected' ? (
+                <>
+                  {usePolling ? <Radio className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
+                  <span>Live{usePolling ? ' (Backup)' : ''}</span>
+                </>
+              ) : connectionStatus === 'reconnecting' ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+                  <span>Connecting</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-4 w-4" />
+                  <span>Offline</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="sticky top-0 z-50" style={{ backgroundColor: 'var(--theme-background)', borderBottomColor: 'var(--theme-border)' }}>
           <div className="px-4 py-4 border-b">
@@ -423,7 +468,7 @@ export default function PublicMenuPage() {
                                   <span className="text-xl font-bold" style={{ color: 'var(--theme-accent)' }}>
                                     ₹{qp.price.toFixed(2)}
                                   </span>
-                                  {outlet.orderManagementEnabled && (
+                                  {canPlaceOrders && (
                                     <div className="flex items-center space-x-2">
                                       {cartQuantity > 0 ? (
                                         <div className="flex items-center space-x-2">
@@ -638,7 +683,7 @@ export default function PublicMenuPage() {
                                   )}
                                 </div>
                                 
-                                {outlet.orderManagementEnabled && (
+                                {canPlaceOrders && (
                                   <div onClick={(e) => e.stopPropagation()}>
                                     {(() => {
                                       const firstQuantityPrice = item.quantityPrices[0];
@@ -724,7 +769,7 @@ export default function PublicMenuPage() {
                                         <span className="text-xl font-bold" style={{ color: 'var(--theme-accent)' }}>
                                           ₹{qp.price.toFixed(2)}
                                         </span>
-                                        {outlet.orderManagementEnabled && (
+                                        {canPlaceOrders && (
                                           <div className="flex items-center space-x-2">
                                             {cartQuantity > 0 ? (
                                               <div className="flex items-center space-x-2">
