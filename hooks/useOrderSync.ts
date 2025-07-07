@@ -175,22 +175,22 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
 
   const handleSSEConnect = useCallback(() => {
     if (!mountedRef.current) return;
-    console.log('SSE/Polling connected');
+    console.log('SSE connected');
     setSyncState(prev => ({ ...prev, connectionStatus: 'connected' }));
   }, []);
 
   const handleSSEDisconnect = useCallback(() => {
     if (!mountedRef.current) return;
-    console.log('SSE/Polling disconnected');
+    console.log('SSE disconnected');
     setSyncState(prev => ({ ...prev, connectionStatus: 'disconnected' }));
   }, []);
 
   const handleSSEError = useCallback((error: string) => {
-    console.error('SSE/Polling error:', error);
+    console.error('SSE error:', error);
   }, []);
 
   // Initialize SSE connection only if outletId is valid
-  const { isConnected, connectionStatus, reconnect: sseReconnect, usePolling } = useSSE({
+  const { isConnected, connectionStatus, reconnect: sseReconnect } = useSSE({
     outletId: outletId && outletId.length === 24 ? outletId : undefined, // Only connect if valid ObjectId
     onNewOrder: handleNewOrder,
     onOrderUpdate: handleOrderUpdate,
@@ -250,6 +250,20 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     };
   }, [loadFromStorage]);
 
+  // Periodic sync when disconnected (reduced frequency)
+  useEffect(() => {
+    if (!isConnected && syncState.activeOrder && mountedRef.current) {
+      const interval = setInterval(() => {
+        if (mountedRef.current) {
+          console.log('Periodic sync - fetching order data');
+          fetchOrderData();
+        }
+      }, 30000); // Sync every 30 seconds when disconnected (reduced from 15s)
+
+      return () => clearInterval(interval);
+    }
+  }, [isConnected, syncState.activeOrder, fetchOrderData]);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -281,7 +295,8 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
       const newOrder = response.data.order;
       console.log('Order created:', newOrder.orderId);
 
-      // The SSE stream or polling will automatically pick up this new order
+      // The SSE stream will automatically pick up this new order
+      // No need to manually emit events like with Socket.IO
       if (mountedRef.current) {
         updateActiveOrder(newOrder);
       }
@@ -307,7 +322,8 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
       
       console.log('Order updated:', updatedOrder.orderId);
 
-      // The SSE stream or polling will automatically pick up this update
+      // The SSE stream will automatically pick up this update
+      // No need to manually emit events like with Socket.IO
       if (mountedRef.current) {
         updateActiveOrder(updatedOrder);
       }
@@ -328,7 +344,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     if (syncState.activeOrder) {
       fetchOrderData(syncState.activeOrder.orderId);
     } else {
-      // Try to reconnect SSE/Polling
+      // Try to reconnect SSE
       sseReconnect();
     }
   }, [syncState.activeOrder, fetchOrderData, sseReconnect]);
@@ -349,7 +365,6 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     isLoading: syncState.isLoading,
     connectionStatus: syncState.connectionStatus,
     isConnected,
-    usePolling,
     
     // Methods
     createOrder,

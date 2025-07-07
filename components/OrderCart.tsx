@@ -13,7 +13,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, Dr
 import { 
   ShoppingCart, Plus, Minus, Trash2, User, Hash, 
   MessageSquare, CreditCard, CheckCircle, Loader2, Clock, History, Edit3, X,
-  Wifi, WifiOff, RefreshCw, AlertCircle, Radio
+  Wifi, WifiOff, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { OrderItem, Order, OrderStatus, PaymentStatus } from '@/lib/orderTypes';
 import { useOrderSync } from '@/hooks/useOrderSync';
@@ -40,7 +40,6 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     isLoading,
     connectionStatus,
     isConnected,
-    usePolling,
     createOrder,
     updateOrder,
     refreshOrder,
@@ -202,8 +201,8 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
         }`}>
           {connectionStatus === 'connected' ? (
             <>
-              {usePolling ? <Radio className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
-              <span>Live{usePolling ? ' (Polling)' : ''}</span>
+              <Wifi className="h-4 w-4" />
+              <span>Live</span>
             </>
           ) : connectionStatus === 'reconnecting' ? (
             <>
@@ -303,13 +302,13 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 </div>
               </div>
               
-              {/* Show connection info */}
+              {/* Show offline warning */}
               {!isConnected && (
                 <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-center space-x-2">
                     <AlertCircle className="h-4 w-4 text-yellow-600" />
                     <p className="text-xs text-yellow-800">
-                      {usePolling ? 'Using backup connection. Order updates may be delayed.' : 'Connection lost. Order updates may be delayed.'}
+                      Connection lost. Order updates may be delayed.
                     </p>
                   </div>
                 </div>
@@ -335,9 +334,9 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 <Button 
                   onClick={handleCheckout} 
                   className="bg-orange-600 hover:bg-orange-700 text-white"
-                  disabled={!isConnected && !usePolling}
+                  disabled={!isConnected}
                 >
-                  {!isConnected && !usePolling ? 'Offline' : 'Checkout'}
+                  {!isConnected ? 'Offline' : 'Checkout'}
                 </Button>
               </div>
             </CardContent>
@@ -412,24 +411,12 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
           <div className="px-4 pb-6 overflow-y-auto">
             <div className="space-y-6">
               {/* Connection Warning */}
-              {!isConnected && !usePolling && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              {!isConnected && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <div className="flex items-center space-x-2">
-                    <WifiOff className="h-4 w-4 text-red-600" />
-                    <p className="text-sm text-red-800">
-                      You're currently offline. Please check your connection and try again.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Polling Warning */}
-              {usePolling && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center space-x-2">
-                    <Radio className="h-4 w-4 text-blue-600" />
-                    <p className="text-sm text-blue-800">
-                      Using backup connection. Your order will be processed normally.
+                    <WifiOff className="h-4 w-4 text-yellow-600" />
+                    <p className="text-sm text-yellow-800">
+                      You're currently offline. Order will be submitted when connection is restored.
                     </p>
                   </div>
                 </div>
@@ -549,7 +536,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 </Button>
                 <Button
                   onClick={submitOrder}
-                  disabled={isLoading || cartItems.length === 0 || (!isConnected && !usePolling)}
+                  disabled={isLoading || cartItems.length === 0}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
                 >
                   {isLoading ? (
@@ -691,8 +678,8 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                     <div className="flex items-center space-x-2">
                       {isConnected ? (
                         <div className="flex items-center space-x-1 text-green-600">
-                          {usePolling ? <Radio className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
-                          <span className="text-xs">Live{usePolling ? ' (Polling)' : ''}</span>
+                          <Wifi className="h-4 w-4" />
+                          <span className="text-xs">Live</span>
                         </div>
                       ) : (
                         <div className="flex items-center space-x-1 text-red-600">
