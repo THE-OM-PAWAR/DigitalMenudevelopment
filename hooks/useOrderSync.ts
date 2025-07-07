@@ -19,6 +19,9 @@ interface UseOrderSyncProps {
   onOrderComplete?: (order: Order) => void;
 }
 
+// Helper to detect Vercel environment (client-side)
+const isVercel = typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+
 export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOrderSyncProps) {
   const [syncState, setSyncState] = useState<OrderSyncState>({
     activeOrder: null,
@@ -189,16 +192,17 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     console.error('SSE error:', error);
   }, []);
 
-  // Initialize SSE connection only if outletId is valid
-  const { isConnected, connectionStatus, reconnect: sseReconnect } = useSSE({
-    outletId: outletId && outletId.length === 24 ? outletId : undefined, // Only connect if valid ObjectId
+  // Initialize SSE connection only if outletId is valid and not on Vercel
+  const sseProps = {
+    outletId: outletId && outletId.length === 24 && !isVercel ? outletId : undefined, // Only connect if valid ObjectId and not Vercel
     onNewOrder: handleNewOrder,
     onOrderUpdate: handleOrderUpdate,
     onOrderComplete: handleOrderComplete,
     onConnect: handleSSEConnect,
     onDisconnect: handleSSEDisconnect,
     onError: handleSSEError
-  });
+  };
+  const { isConnected, connectionStatus, reconnect: sseReconnect } = useSSE(sseProps);
 
   // Update connection status from SSE
   useEffect(() => {
@@ -377,3 +381,5 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     lastSyncTime: syncState.lastSyncTime
   };
 }
+
+export const dynamic = "force-dynamic";
