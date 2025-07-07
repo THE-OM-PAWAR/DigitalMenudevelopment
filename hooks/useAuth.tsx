@@ -23,8 +23,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggedOut, setIsLoggedOut] = useState(false);
 
   const checkAuth = async () => {
+    if (isLoggedOut) return;
     try {
       const response = await axios.get('/api/auth/me');
       setUser(response.data.user);
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.data.user);
       } catch (refreshError) {
         setUser(null);
+        setIsLoggedOut(true);
       }
     } finally {
       setLoading(false);
@@ -45,11 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const response = await axios.post('/api/auth/signin', { email, password });
     setUser(response.data.user);
+    setIsLoggedOut(false);
   };
 
   const signUp = async (username: string, email: string, password: string) => {
     const response = await axios.post('/api/auth/signup', { username, email, password });
     setUser(response.data.user);
+    setIsLoggedOut(false);
   };
 
   const signOut = async () => {
@@ -58,12 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshAuth = async () => {
+    if (isLoggedOut) return;
     try {
       await axios.post('/api/auth/refresh');
       const response = await axios.get('/api/auth/me');
       setUser(response.data.user);
     } catch (error) {
       setUser(null);
+      setIsLoggedOut(true);
     }
   };
 
@@ -76,13 +83,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.response?.status === 401 && !error.config._retry) {
+        const isAuthRefresh = error.config?.url?.includes('/api/auth/refresh');
+        if (error.response?.status === 401 && !error.config._retry && !isLoggedOut && !isAuthRefresh) {
           error.config._retry = true;
           try {
             await axios.post('/api/auth/refresh');
             return axios(error.config);
           } catch (refreshError) {
             setUser(null);
+            setIsLoggedOut(true);
             return Promise.reject(refreshError);
           }
         }
@@ -93,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       axios.interceptors.response.eject(interceptor);
     };
-  }, []);
+  }, [isLoggedOut]);
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, refreshAuth }}>

@@ -157,21 +157,42 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     }
   }, [isOrderCompleted, moveOrderToHistory, saveToStorage, onOrderUpdate]);
 
+  // Helper to get current active orderId from storage
+  const getCurrentActiveOrderId = useCallback(() => {
+    const keys = getStorageKeys();
+    const activeOrderData = localStorage.getItem(keys.activeOrder);
+    if (activeOrderData) {
+      try {
+        const order = JSON.parse(activeOrderData);
+        return order?.orderId;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, [getStorageKeys]);
+
   // SSE event handlers
   const handleNewOrder = useCallback((order: Order) => {
+    const currentOrderId = getCurrentActiveOrderId();
+    if (order.orderId !== currentOrderId) return;
     console.log('New order received:', order.orderId);
     updateActiveOrder(order);
-  }, [updateActiveOrder]);
+  }, [updateActiveOrder, getCurrentActiveOrderId]);
 
   const handleOrderUpdate = useCallback((order: Order) => {
+    const currentOrderId = getCurrentActiveOrderId();
+    if (order.orderId !== currentOrderId) return;
     console.log('Order update received:', order.orderId);
     updateActiveOrder(order);
-  }, [updateActiveOrder]);
+  }, [updateActiveOrder, getCurrentActiveOrderId]);
 
   const handleOrderComplete = useCallback((order: Order) => {
+    const currentOrderId = getCurrentActiveOrderId();
+    if (order.orderId !== currentOrderId) return;
     console.log('Order completion received:', order.orderId);
     moveOrderToHistory(order);
-  }, [moveOrderToHistory]);
+  }, [moveOrderToHistory, getCurrentActiveOrderId]);
 
   const handleSSEConnect = useCallback(() => {
     if (!mountedRef.current) return;
