@@ -27,11 +27,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check authentication
-    const user = getAuthUser(request);
-    if (!user) {
-      return new Response('Unauthorized', { status: 401 });
-    }
+    // Public endpoint: no authentication required for menu/guest access
+    // const user = getAuthUser(request);
+    // if (!user) {
+    //   return new Response('Unauthorized', { status: 401 });
+    // }
 
     // Get outlet ID from query params
     const { searchParams } = new URL(request.url);
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       return new Response('Outlet ID is required', { status: 400 });
     }
 
-    console.log(`Starting SSE stream for outlet: ${outletId}, user: ${user.userId}`);
+    console.log(`Starting SSE stream for outlet: ${outletId}`);
 
     const client = await connectToMongo();
     const db = client.db();
