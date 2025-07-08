@@ -364,8 +364,17 @@ export default function OrdersPage() {
                           {/* Item summary */}
                           <div className="flex flex-wrap gap-1">
                             {order.items.slice(0, 3).map((item, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-xs">
+                              <Badge 
+                                key={idx} 
+                                variant="secondary" 
+                                className={`text-xs ${
+                                  item.isNewlyAdded 
+                                    ? 'bg-green-100 text-green-800 border-green-300' 
+                                    : ''
+                                }`}
+                              >
                                 {item.quantity}x {item.name}
+                                {item.isNewlyAdded && ' (NEW)'}
                               </Badge>
                             ))}
                             {order.items.length > 3 && (
@@ -600,10 +609,27 @@ function OrderDetailsPanel({
           <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Order Items</h4>
           <div className="space-y-2">
             {order.items.map((item, index) => (
-              <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div 
+                key={index} 
+                className={`flex justify-between items-center p-3 rounded-lg border ${
+                  item.isNewlyAdded 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
                 <div className="flex-1">
-                  <p className="font-medium text-sm">{item.name}</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="font-medium text-sm">{item.name}</p>
+                    {item.isNewlyAdded && (
+                      <Badge className="bg-green-600 text-white text-xs">NEW</Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-600">{item.quantityDescription}</p>
+                  {item.isNewlyAdded && item.addedAt && (
+                    <p className="text-xs text-green-600">
+                      Added: {new Date(item.addedAt).toLocaleTimeString()}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-sm">{item.quantity}x ₹{item.price.toFixed(2)}</p>

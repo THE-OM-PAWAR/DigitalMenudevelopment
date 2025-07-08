@@ -18,6 +18,8 @@ export interface OrderItem {
   price: number;
   quantityId: string;
   quantityDescription: string;
+  addedAt?: Date; // Track when item was added
+  isNewlyAdded?: boolean; // Flag for newly added items
 }
 
 export interface Order {
@@ -34,6 +36,7 @@ export interface Order {
     created: Date;
     updated: Date;
   };
+  lastItemAddedAt?: Date; // Track when last item was added
 }
 
 export interface OrderUpdate {

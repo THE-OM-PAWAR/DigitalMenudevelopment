@@ -44,6 +44,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     isConnected,
     createOrder,
     updateOrder,
+    addItemsToOrder,
     refreshOrder,
     isOrderCompleted,
     hasNetworkError
@@ -71,6 +72,11 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
   // Helper function to check if order can be edited
   const canEditOrder = (orderStatus: OrderStatus, paymentStatus: PaymentStatus) => {
     return orderStatus === OrderStatus.TAKEN && paymentStatus === PaymentStatus.UNPAID;
+  };
+
+  // Helper function to check if items can be added to active order
+  const canAddToActiveOrder = () => {
+    return activeOrder && activeOrder.paymentStatus === PaymentStatus.UNPAID;
   };
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
@@ -103,22 +109,37 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     if (cartItems.length === 0) return;
 
     try {
-      const newOrder = await createOrder({
-        items: cartItems,
-        totalAmount,
-        comments,
-        customerName,
-        tableNumber,
-      });
+      if (canAddToActiveOrder()) {
+        // Add items to existing active order
+        await addItemsToOrder(activeOrder!.orderId, cartItems);
+        
+        setOrderSubmitted(true);
+        clearCart();
+        setIsCheckoutOpen(false);
+        
+        // Reset form
+        setCustomerName('');
+        setTableNumber('');
+        setComments('');
+      } else {
+        // Create new order
+        const newOrder = await createOrder({
+          items: cartItems,
+          totalAmount,
+          comments,
+          customerName,
+          tableNumber,
+        });
 
-      setOrderSubmitted(true);
-      clearCart();
-      setIsCheckoutOpen(false);
-      
-      // Reset form
-      setCustomerName('');
-      setTableNumber('');
-      setComments('');
+        setOrderSubmitted(true);
+        clearCart();
+        setIsCheckoutOpen(false);
+        
+        // Reset form
+        setCustomerName('');
+        setTableNumber('');
+        setComments('');
+      }
 
       // Auto-hide success message after 3 seconds
       setTimeout(() => {
@@ -402,21 +423,33 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
           <DrawerHeader>
             <DrawerTitle className="flex items-center">
               <ShoppingCart className="h-5 w-5 mr-2" />
-              Your Order
+              {canAddToActiveOrder() ? 'Add to Active Order' : 'Your Order'}
             </DrawerTitle>
             <DrawerDescription>
-              Review your order and provide details
+              {canAddToActiveOrder() 
+                ? 'Add items to your current unpaid order' 
+                : 'Review your order and provide details'}
             </DrawerDescription>
           </DrawerHeader>
 
           <div className="px-4 pb-6 overflow-y-auto">
             <div className="space-y-6">
-              {activeOrder && (
+              {activeOrder && !canAddToActiveOrder() && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                   <div className="flex items-center space-x-2">
                     <AlertCircle className="h-4 w-4 text-yellow-600" />
                     <p className="text-sm text-yellow-800">
-                      You have an active order. You can add items for your next order, but cannot checkout until your current order is completed.
+                      You have an active paid order. You can add items for your next order, but cannot checkout until your current order is completed.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {canAddToActiveOrder() && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <p className="text-sm text-blue-800">
+                      You have an active unpaid order. These items will be added to your current order.
                     </p>
                   </div>
                 </div>
@@ -547,18 +580,18 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 </Button>
                 <Button
                   onClick={submitOrder}
-                  disabled={isLoading || cartItems.length === 0 || !!activeOrder}
+                  disabled={isLoading || cartItems.length === 0 || (activeOrder && !canAddToActiveOrder())}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Placing Order...
+                      {canAddToActiveOrder() ? 'Adding Items...' : 'Placing Order...'}
                     </>
                   ) : (
                     <>
                       <CreditCard className="mr-2 h-4 w-4" />
-                      Place Order
+                      {canAddToActiveOrder() ? 'Add to Order' : 'Place Order'}
                     </>
                   )}
                 </Button>
@@ -731,8 +764,18 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                       
                       <div className="space-y-2">
                         {activeOrder.items.map((item, index) => (
-                          <div key={index} className="flex justify-between text-sm">
-                            <span>{item.quantity}x {item.name}</span>
+                          <div 
+                            key={index} 
+                            className={`flex justify-between text-sm p-2 rounded ${
+                              item.isNewlyAdded ? 'bg-green-50 border border-green-200' : ''
+                            }`}
+                          >
+                            <span className="flex items-center">
+                              {item.quantity}x {item.name}
+                              {item.isNewlyAdded && (
+                                <Badge className="ml-2 bg-green-600 text-white text-xs">NEW</Badge>
+                              )}
+                            </span>
                             <span>₹{(item.quantity * item.price).toFixed(2)}</span>
                           </div>
                         ))}

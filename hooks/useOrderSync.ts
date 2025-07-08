@@ -398,6 +398,39 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     }
   }, [updateActiveOrder]);
 
+  const addItemsToOrder = useCallback(async (orderId: string, items: OrderItem[]) => {
+    if (!mountedRef.current) return;
+
+    try {
+      setSyncState(prev => ({ ...prev, isLoading: true }));
+
+      const response = await axios.post(`/api/orders/${orderId}/add-items`, { items });
+      const updatedOrder = response.data.order;
+
+      console.log('Items added to order:', updatedOrder.orderId);
+
+      if (mountedRef.current) {
+        updateActiveOrder(updatedOrder);
+      }
+      return updatedOrder;
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.code === 'ERR_NETWORK') {
+        setHasNetworkError(true);
+        toast({
+          title: 'Connection lost, please reload page',
+          description: '',
+          variant: 'destructive',
+        });
+      }
+      console.error('Error adding items to order:', error);
+      throw error;
+    } finally {
+      if (mountedRef.current) {
+        setSyncState(prev => ({ ...prev, isLoading: false }));
+      }
+    }
+  }, [updateActiveOrder]);
+
   const refreshOrder = useCallback(() => {
     if (!mountedRef.current) return;
 
@@ -430,6 +463,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     // Methods
     createOrder,
     updateOrder,
+    addItemsToOrder,
     refreshOrder,
     clearActiveOrder,
 
