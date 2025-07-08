@@ -12,7 +12,8 @@ const playNotificationSound = () => {
 };
 
 interface OrderSyncState {
-  activeOrder: Order | null;
+  activeOrder: Order | null; // Primary active order (for adding items)
+  activeOrders: Order[]; // All active orders (unpaid or paid but not served)
   orderHistory: Order[];
   isLoading: boolean;
   lastSyncTime: number;
@@ -28,6 +29,7 @@ interface UseOrderSyncProps {
 export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOrderSyncProps) {
   const [syncState, setSyncState] = useState<OrderSyncState>({
     activeOrder: null,
+    activeOrders: [],
     orderHistory: [],
     isLoading: false,
     lastSyncTime: 0,
@@ -42,39 +44,57 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
   // Storage keys
   const getStorageKeys = useCallback(() => ({
     activeOrder: `activeOrder-${outletId}`,
+    activeOrders: `activeOrders-${outletId}`,
     orderHistory: `orderHistory-${outletId}`,
     lastSync: `lastSync-${outletId}`,
   }), [outletId]);
 
+  // Helper to determine primary active order (unpaid orders get priority)
+  const getPrimaryActiveOrder = useCallback((orders: Order[]): Order | null => {
+    if (orders.length === 0) return null;
+    
+    // Priority: unpaid orders first, then most recent
+    const unpaidOrders = orders.filter(order => order.paymentStatus === PaymentStatus.UNPAID);
+    if (unpaidOrders.length > 0) {
+      return unpaidOrders.sort((a, b) => new Date(b.timestamps.created).getTime() - new Date(a.timestamps.created).getTime())[0];
+    }
+    
+    // If no unpaid orders, return the most recent
+    return orders.sort((a, b) => new Date(b.timestamps.created).getTime() - new Date(a.timestamps.created).getTime())[0];
+  }, []);
+
   // Load data from localStorage
   const loadFromStorage = useCallback(() => {
-    if (!outletId) return { activeOrder: null, orderHistory: [], lastSyncTime: 0 };
+    if (!outletId) return { activeOrder: null, activeOrders: [], orderHistory: [], lastSyncTime: 0 };
 
     const keys = getStorageKeys();
     try {
-      const activeOrderData = localStorage.getItem(keys.activeOrder);
+      const activeOrdersData = localStorage.getItem(keys.activeOrders);
       const historyData = localStorage.getItem(keys.orderHistory);
       const lastSyncData = localStorage.getItem(keys.lastSync);
 
-      const activeOrder = activeOrderData ? JSON.parse(activeOrderData) : null;
+      const activeOrders = activeOrdersData ? JSON.parse(activeOrdersData) : [];
       const orderHistory = historyData ? JSON.parse(historyData) : [];
       const lastSyncTime = lastSyncData ? parseInt(lastSyncData) : 0;
+      
+      const primaryActiveOrder = getPrimaryActiveOrder(activeOrders);
 
       if (mountedRef.current) {
         setSyncState(prev => ({
           ...prev,
-          activeOrder,
+          activeOrder: primaryActiveOrder,
+          activeOrders,
           orderHistory,
           lastSyncTime
         }));
       }
 
-      return { activeOrder, orderHistory, lastSyncTime };
+      return { activeOrder: primaryActiveOrder, activeOrders, orderHistory, lastSyncTime };
     } catch (error) {
       console.error('Error loading from storage:', error);
-      return { activeOrder: null, orderHistory: [], lastSyncTime: 0 };
+      return { activeOrder: null, activeOrders: [], orderHistory: [], lastSyncTime: 0 };
     }
-  }, [getStorageKeys, outletId]);
+  }, [getStorageKeys, outletId, getPrimaryActiveOrder]);
 
   // Save data to localStorage
   const saveToStorage = useCallback((data: Partial<OrderSyncState>) => {
@@ -82,12 +102,8 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
 
     const keys = getStorageKeys();
     try {
-      if (data.activeOrder !== undefined) {
-        if (data.activeOrder) {
-          localStorage.setItem(keys.activeOrder, JSON.stringify(data.activeOrder));
-        } else {
-          localStorage.removeItem(keys.activeOrder);
-        }
+      if (data.activeOrders !== undefined) {
+        localStorage.setItem(keys.activeOrders, JSON.stringify(data.activeOrders));
       }
       if (data.orderHistory) {
         localStorage.setItem(keys.orderHistory, JSON.stringify(data.orderHistory));
@@ -113,15 +129,19 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
 
     setSyncState(prev => {
       const newHistory = [order, ...prev.orderHistory.filter(h => h.orderId !== order.orderId)];
+      const newActiveOrders = prev.activeOrders.filter((o: Order) => o.orderId !== order.orderId);
+      const newPrimaryActive = getPrimaryActiveOrder(newActiveOrders);
+      
       const newState = {
         ...prev,
-        activeOrder: null,
+        activeOrder: newPrimaryActive,
+        activeOrders: newActiveOrders,
         orderHistory: newHistory,
         lastSyncTime: Date.now()
       };
 
       saveToStorage({
-        activeOrder: null,
+        activeOrders: newActiveOrders,
         orderHistory: newHistory,
         lastSyncTime: newState.lastSyncTime
       });
@@ -132,7 +152,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     if (onOrderComplete) {
       onOrderComplete(order);
     }
-  }, [saveToStorage, onOrderComplete]);
+  }, [saveToStorage, onOrderComplete, getPrimaryActiveOrder]);
 
   // Update active order
   const updateActiveOrder = useCallback((order: Order) => {
@@ -167,14 +187,30 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     }
 
     setSyncState(prev => {
+      // Update or add the order in activeOrders
+      const existingIndex = prev.activeOrders.findIndex((o: Order) => o.orderId === order.orderId);
+      let newActiveOrders;
+      
+      if (existingIndex !== -1) {
+        // Update existing order
+        newActiveOrders = [...prev.activeOrders];
+        newActiveOrders[existingIndex] = order;
+      } else {
+        // Add new order
+        newActiveOrders = [...prev.activeOrders, order];
+      }
+      
+      const newPrimaryActive = getPrimaryActiveOrder(newActiveOrders);
+
       const newState = {
         ...prev,
-        activeOrder: order,
+        activeOrder: newPrimaryActive,
+        activeOrders: newActiveOrders,
         lastSyncTime: Date.now()
       };
 
       saveToStorage({
-        activeOrder: order,
+        activeOrders: newActiveOrders,
         lastSyncTime: newState.lastSyncTime
       });
 
@@ -184,44 +220,48 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     if (onOrderUpdate) {
       onOrderUpdate(order);
     }
-  }, [isOrderCompleted, moveOrderToHistory, saveToStorage, onOrderUpdate]);
+  }, [isOrderCompleted, moveOrderToHistory, saveToStorage, onOrderUpdate, getPrimaryActiveOrder]);
 
-  // Helper to get current active orderId from storage
-  const getCurrentActiveOrderId = useCallback(() => {
+  // Helper to get current active order IDs from storage
+  const getCurrentActiveOrderIds = useCallback(() => {
     const keys = getStorageKeys();
-    const activeOrderData = localStorage.getItem(keys.activeOrder);
-    if (activeOrderData) {
+    const activeOrdersData = localStorage.getItem(keys.activeOrders);
+    if (activeOrdersData) {
       try {
-        const order = JSON.parse(activeOrderData);
-        return order?.orderId;
+        const orders = JSON.parse(activeOrdersData);
+        return orders.map((order: Order) => order.orderId);
       } catch {
-        return null;
+        return [];
       }
     }
-    return null;
+    return [];
   }, [getStorageKeys]);
 
   // SSE event handlers
   const handleNewOrder = useCallback((order: Order) => {
-    const currentOrderId = getCurrentActiveOrderId();
-    if (order.orderId !== currentOrderId) return;
-    console.log('New order received:', order.orderId);
-    updateActiveOrder(order);
-  }, [updateActiveOrder, getCurrentActiveOrderId]);
+    const currentOrderIds = getCurrentActiveOrderIds();
+    if (!currentOrderIds.includes(order.orderId)) {
+      // This is a genuinely new order
+      console.log('New order received:', order.orderId);
+      updateActiveOrder(order);
+    }
+  }, [updateActiveOrder, getCurrentActiveOrderIds]);
 
   const handleOrderUpdate = useCallback((order: Order) => {
-    const currentOrderId = getCurrentActiveOrderId();
-    if (order.orderId !== currentOrderId) return;
-    console.log('Order update received:', order.orderId);
-    updateActiveOrder(order);
-  }, [updateActiveOrder, getCurrentActiveOrderId]);
+    const currentOrderIds = getCurrentActiveOrderIds();
+    if (currentOrderIds.includes(order.orderId)) {
+      console.log('Order update received:', order.orderId);
+      updateActiveOrder(order);
+    }
+  }, [updateActiveOrder, getCurrentActiveOrderIds]);
 
   const handleOrderComplete = useCallback((order: Order) => {
-    const currentOrderId = getCurrentActiveOrderId();
-    if (order.orderId !== currentOrderId) return;
-    console.log('Order completion received:', order.orderId);
-    moveOrderToHistory(order);
-  }, [moveOrderToHistory, getCurrentActiveOrderId]);
+    const currentOrderIds = getCurrentActiveOrderIds();
+    if (currentOrderIds.includes(order.orderId)) {
+      console.log('Order completion received:', order.orderId);
+      moveOrderToHistory(order);
+    }
+  }, [moveOrderToHistory, getCurrentActiveOrderIds]);
 
   const handleSSEConnect = useCallback(() => {
     if (!mountedRef.current) return;
@@ -287,8 +327,10 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
       // If order not found, it might have been completed
       if (axios.isAxiosError(error) && error.response?.status === 404 && mountedRef.current) {
         setSyncState(prev => {
-          saveToStorage({ activeOrder: null });
-          return { ...prev, activeOrder: null };
+          const newActiveOrders = prev.activeOrders.filter((o: Order) => o.orderId !== targetOrderId);
+          const newPrimaryActive = getPrimaryActiveOrder(newActiveOrders);
+          saveToStorage({ activeOrders: newActiveOrders });
+          return { ...prev, activeOrder: newPrimaryActive, activeOrders: newActiveOrders };
         });
       }
     } finally {
@@ -446,14 +488,15 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     if (!mountedRef.current) return;
 
     setSyncState(prev => {
-      saveToStorage({ activeOrder: null });
-      return { ...prev, activeOrder: null };
+      saveToStorage({ activeOrders: [] });
+      return { ...prev, activeOrder: null, activeOrders: [] };
     });
   }, [saveToStorage]);
 
   return {
     // State
     activeOrder: syncState.activeOrder,
+    activeOrders: syncState.activeOrders,
     orderHistory: syncState.orderHistory,
     isLoading: syncState.isLoading,
     connectionStatus: syncState.connectionStatus,

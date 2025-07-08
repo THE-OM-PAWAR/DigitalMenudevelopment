@@ -38,6 +38,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
 
   const {
     activeOrder,
+    activeOrders,
     orderHistory,
     isLoading,
     connectionStatus,
@@ -234,8 +235,10 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     <>
       {/* Floating Cart/Order Status */}
       <div className="fixed bottom-4 left-4 right-4 z-50 space-y-4">
-        {activeOrder && (
+        {/* Show all active orders */}
+        {activeOrders.map((order: Order, index: number) => (
           <div
+            key={order.orderId}
             role="button"
             tabIndex={0}
             aria-label="View Order Details"
@@ -245,36 +248,41 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
             style={{ cursor: 'pointer' }}
           >
             <Card className="shadow-lg border-2 bg-white" style={{
-              borderColor: activeOrder.orderStatus === OrderStatus.TAKEN ? '#f59e0b' : 
-                          activeOrder.orderStatus === OrderStatus.PREPARING ? '#3b82f6' :
-                          activeOrder.orderStatus === OrderStatus.PREPARED ? '#10b981' : '#6b7280'
+              borderColor: order.orderStatus === OrderStatus.TAKEN ? '#f59e0b' : 
+                          order.orderStatus === OrderStatus.PREPARING ? '#3b82f6' :
+                          order.orderStatus === OrderStatus.PREPARED ? '#10b981' : '#6b7280'
             }}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="relative">
-                      {getStatusIcon(activeOrder.orderStatus)}
-                      {/* Connection indicator */}
-                      <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
-                        isConnected ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
+                      {getStatusIcon(order.orderStatus)}
+                      {/* Connection indicator - only show on primary order */}
+                      {order.orderId === activeOrder?.orderId && (
+                        <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
+                          isConnected ? 'bg-green-500' : 'bg-red-500'
+                        }`} />
+                      )}
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900">
-                        Order {activeOrder.orderId.split('-')[1]}
+                        Order {order.orderId.split('-')[1]}
+                        {order.paymentStatus === PaymentStatus.UNPAID && (
+                          <span className="ml-2 text-xs text-blue-600">(Primary)</span>
+                        )}
                       </p>
                       <div className="flex items-center space-x-2">
-                        <Badge variant="secondary" className={`text-xs ${getStatusColor(activeOrder.orderStatus)}`}>
-                          {activeOrder.orderStatus}
+                        <Badge variant="secondary" className={`text-xs ${getStatusColor(order.orderStatus)}`}>
+                          {order.orderStatus}
                         </Badge>
-                        <Badge variant="outline" className={`text-xs ${getPaymentColor(activeOrder.paymentStatus)}`}>
-                          {activeOrder.paymentStatus}
+                        <Badge variant="outline" className={`text-xs ${getPaymentColor(order.paymentStatus)}`}>
+                          {order.paymentStatus}
                         </Badge>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {!isConnected && (
+                    {!isConnected && order.orderId === activeOrder?.orderId && (
                       <Button
                         onClick={e => { e.stopPropagation(); refreshOrder(); }}
                         size="sm"
@@ -286,9 +294,9 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                         Sync
                       </Button>
                     )}
-                    {canEditOrder(activeOrder.orderStatus, activeOrder.paymentStatus) && (
+                    {canEditOrder(order.orderStatus, order.paymentStatus) && (
                       <Button
-                        onClick={e => { e.stopPropagation(); handleEditOrder(activeOrder); }}
+                        onClick={e => { e.stopPropagation(); handleEditOrder(order); }}
                         size="sm"
                         variant="outline"
                         className="border-orange-300 text-orange-600 hover:bg-orange-50"
@@ -298,14 +306,14 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                       </Button>
                     )}
                     {/* If no Edit button, show right arrow */}
-                    {!canEditOrder(activeOrder.orderStatus, activeOrder.paymentStatus) && (
+                    {!canEditOrder(order.orderStatus, order.paymentStatus) && (
                       <ChevronRight className="h-6 w-6 text-gray-400 ml-2" />
                     )}
                   </div>
                 </div>
                 
-                {/* Show offline warning */}
-                {!isConnected && (
+                {/* Show offline warning - only on primary order */}
+                {!isConnected && order.orderId === activeOrder?.orderId && (
                   <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <AlertCircle className="h-4 w-4 text-yellow-600" />
@@ -318,7 +326,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
               </CardContent>
             </Card>
           </div>
-        )}
+        ))}
         {/* Always show cart */}
         {cartItems.length > 0 && (
           <div
@@ -738,11 +746,13 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
 
           <div className="px-4 pb-6 overflow-y-auto">
             <div className="space-y-4">
-              {/* Current Active Order */}
-              {activeOrder && (
+              {/* All Active Orders */}
+              {activeOrders.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-green-600">Current Order</h3>
+                    <h3 className="font-semibold text-green-600">
+                      Active Orders ({activeOrders.length})
+                    </h3>
                     <div className="flex items-center space-x-2">
                       {isConnected ? (
                         <div className="flex items-center space-x-1 text-green-600">
@@ -766,80 +776,93 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                     </div>
                   </div>
                   
-                  <Card className="border-green-200">
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <p className="font-semibold">{activeOrder.orderId}</p>
-                          <p className="text-sm text-gray-600">
-                            {new Date(activeOrder.timestamps.created).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <Badge variant="secondary" className={`mb-1 ${getStatusColor(activeOrder.orderStatus)}`}>
-                            {activeOrder.orderStatus}
-                          </Badge>
-                          <Badge variant="outline" className={`mb-1 ml-1 ${getPaymentColor(activeOrder.paymentStatus)}`}>
-                            {activeOrder.paymentStatus}
-                          </Badge>
-                          <p className="font-bold">₹{activeOrder.totalAmount.toFixed(2)}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {activeOrder.items.map((item, index) => (
-                          <div 
-                            key={index} 
-                            className={`flex justify-between text-sm p-2 rounded ${
-                              item.isNewlyAdded ? 'bg-green-50 border border-green-200' : ''
-                            }`}
-                          >
-                            <span className="flex items-center">
-                              {item.quantity}x {item.name}
-                              {item.isNewlyAdded && (
-                                <Badge className="ml-2 bg-green-600 text-white text-xs">NEW</Badge>
+                  {activeOrders.map((order: Order, orderIndex: number) => (
+                    <Card key={order.orderId} className={`${
+                      order.paymentStatus === PaymentStatus.UNPAID 
+                        ? 'border-blue-200 bg-blue-50' 
+                        : 'border-green-200'
+                    }`}>
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="font-semibold">
+                              {order.orderId}
+                              {order.paymentStatus === PaymentStatus.UNPAID && (
+                                <span className="ml-2 text-xs text-blue-600">(Primary)</span>
                               )}
-                            </span>
-                            <span>₹{(item.quantity * item.price).toFixed(2)}</span>
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(order.timestamps.created).toLocaleString()}
+                            </p>
                           </div>
-                        ))}
-                      </div>
-
-                      {canEditOrder(activeOrder.orderStatus, activeOrder.paymentStatus) && (
-                        <Button
-                          onClick={() => handleEditOrder(activeOrder)}
-                          size="sm"
-                          className="w-full mt-3 bg-orange-600 hover:bg-orange-700"
-                        >
-                          <Edit3 className="h-4 w-4 mr-2" />
-                          Edit Order
-                        </Button>
-                      )}
-
-                      {/* Order Progress */}
-                      <div className="mt-4 pt-4 border-t">
-                        <h4 className="text-sm font-medium mb-3">Order Progress</h4>
-                        <div className="space-y-2">
-                          {Object.values(OrderStatus).map((status, index) => {
-                            const isCompleted = Object.values(OrderStatus).indexOf(activeOrder.orderStatus) >= index;
-                            const isCurrent = activeOrder.orderStatus === status;
-                            
-                            return (
-                              <div key={status} className={`flex items-center space-x-3 ${
-                                isCompleted ? 'text-green-600' : 'text-gray-400'
-                              }`}>
-                                <div className={`w-3 h-3 rounded-full ${
-                                  isCompleted ? 'bg-green-600' : 'bg-gray-300'
-                                } ${isCurrent ? 'animate-pulse' : ''}`} />
-                                <span className="text-sm capitalize">{status}</span>
-                                {isCurrent && <span className="text-xs">(Current)</span>}
-                              </div>
-                            );
-                          })}
+                          <div className="text-right">
+                            <Badge variant="secondary" className={`mb-1 ${getStatusColor(order.orderStatus)}`}>
+                              {order.orderStatus}
+                            </Badge>
+                            <Badge variant="outline" className={`mb-1 ml-1 ${getPaymentColor(order.paymentStatus)}`}>
+                              {order.paymentStatus}
+                            </Badge>
+                            <p className="font-bold">₹{order.totalAmount.toFixed(2)}</p>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        
+                        <div className="space-y-2">
+                          {order.items.map((item, index) => (
+                            <div 
+                              key={index} 
+                              className={`flex justify-between text-sm p-2 rounded ${
+                                item.isNewlyAdded ? 'bg-green-50 border border-green-200' : ''
+                              }`}
+                            >
+                              <span className="flex items-center">
+                                {item.quantity}x {item.name}
+                                {item.isNewlyAdded && (
+                                  <Badge className="ml-2 bg-green-600 text-white text-xs">NEW</Badge>
+                                )}
+                              </span>
+                              <span>₹{(item.quantity * item.price).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {canEditOrder(order.orderStatus, order.paymentStatus) && (
+                          <Button
+                            onClick={() => handleEditOrder(order)}
+                            size="sm"
+                            className="w-full mt-3 bg-orange-600 hover:bg-orange-700"
+                          >
+                            <Edit3 className="h-4 w-4 mr-2" />
+                            Edit Order
+                          </Button>
+                        )}
+
+                        {/* Order Progress - only show for primary order */}
+                        {order.paymentStatus === PaymentStatus.UNPAID && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-sm font-medium mb-3">Order Progress</h4>
+                            <div className="space-y-2">
+                              {Object.values(OrderStatus).map((status, index) => {
+                                const isCompleted = Object.values(OrderStatus).indexOf(order.orderStatus) >= index;
+                                const isCurrent = order.orderStatus === status;
+                                
+                                return (
+                                  <div key={status} className={`flex items-center space-x-3 ${
+                                    isCompleted ? 'text-green-600' : 'text-gray-400'
+                                  }`}>
+                                    <div className={`w-3 h-3 rounded-full ${
+                                      isCompleted ? 'bg-green-600' : 'bg-gray-300'
+                                    } ${isCurrent ? 'animate-pulse' : ''}`} />
+                                    <span className="text-sm capitalize">{status}</span>
+                                    {isCurrent && <span className="text-xs">(Current)</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               )}
 
@@ -879,7 +902,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 </div>
               )}
 
-              {!activeOrder && orderHistory.length === 0 && (
+              {activeOrders.length === 0 && orderHistory.length === 0 && (
                 <div className="text-center py-8">
                   <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">No Orders Yet</h3>
