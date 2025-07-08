@@ -5,6 +5,11 @@ import { useSSE } from '@/hooks/useSSE';
 import { Order, OrderItem, OrderStatus, PaymentStatus } from '@/lib/orderTypes';
 import axios from 'axios';
 import { toast } from '@/hooks/use-toast';
+// Notification sound
+const playNotificationSound = () => {
+  const audio = new window.Audio('/notification.mp3');
+  audio.play();
+};
 
 interface OrderSyncState {
   activeOrder: Order | null;
@@ -132,8 +137,29 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
   // Update active order
   const updateActiveOrder = useCallback((order: Order) => {
     if (!mountedRef.current) return;
-
+    
     console.log('Updating active order:', order.orderId);
+
+    // Browser notification and toast with sound
+    if (typeof window !== 'undefined') {
+      // Request permission if needed
+      if (window.Notification && Notification.permission !== 'granted') {
+        Notification.requestPermission();
+      }
+      // Show notification
+      if (window.Notification && Notification.permission === 'granted') {
+        new Notification('Order Update', {
+          body: `Your order is now ${order.orderStatus.toUpperCase()}`,
+          icon: '/favicon.ico',
+        });
+      }
+      // Toast with sound
+      playNotificationSound();
+      toast({
+        title: 'Order Update',
+        description: `Your order is now ${order.orderStatus.toUpperCase()}`,
+      });
+    }
 
     if (isOrderCompleted(order)) {
       moveOrderToHistory(order);

@@ -823,7 +823,7 @@ export default function PublicMenuPage() {
                     <Utensils className="h-12 w-12 mx-auto mb-4" style={{ color: 'var(--theme-text-secondary)' }} />
                     <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--theme-text)' }}>Menu Coming Soon</h3>
                     <p style={{ color: 'var(--theme-text-secondary)' }}>
-                      We're working on adding delicious items to our menu. Please check back later!
+                      We are working on adding delicious items to our menu. Please check back later!
                     </p>
                   </>
                 )}

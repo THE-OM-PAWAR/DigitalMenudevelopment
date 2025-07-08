@@ -1,1 +1,6 @@
 .
+@page.tsx @OrderCart.tsx  listen if the order status is unpaid then the coustomer should be able to add the items to the existing active order list with a highlight item of new or added later item (on the both side order management and menu page as well ) in this case there is no need to add in the cart  and if the active order is paid or canceled or no active order then the coustomer shhould be abled to place the another order as usual 
+
+before implementing the plan understand the app first
+
+

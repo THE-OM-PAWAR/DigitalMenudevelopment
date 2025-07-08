@@ -192,18 +192,14 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     }
   };
 
-  // Show active order if exists, otherwise show cart
-  const shouldShowCart = cartItems.length > 0 || activeOrder;
-
-  if (!shouldShowCart) {
-    return null;
-  }
+  // Show cart and active order independently
+  // Remove shouldShowCart logic
 
   return (
     <>
       {/* Floating Cart/Order Status */}
-      <div className="fixed bottom-4 left-4 right-4 z-50">
-        {activeOrder ? (
+      <div className="fixed bottom-4 left-4 right-4 z-50 space-y-4">
+        {activeOrder && (
           <div
             role="button"
             tabIndex={0}
@@ -287,7 +283,9 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
               </CardContent>
             </Card>
           </div>
-        ) : (
+        )}
+        {/* Always show cart */}
+        {cartItems.length > 0 && (
           <div
             role="button"
             tabIndex={0}
@@ -413,13 +411,23 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
 
           <div className="px-4 pb-6 overflow-y-auto">
             <div className="space-y-6">
+              {activeOrder && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    <p className="text-sm text-yellow-800">
+                      You have an active order. You can add items for your next order, but cannot checkout until your current order is completed.
+                    </p>
+                  </div>
+                </div>
+              )}
               {/* Connection Warning */}
               {!isConnected && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <div className="flex items-center space-x-2">
                     <WifiOff className="h-4 w-4 text-yellow-600" />
                     <p className="text-sm text-yellow-800">
-                      You're currently offline. Order will be submitted when connection is restored.
+                      You are currently offline. Order will be submitted when connection is restored.
                     </p>
                   </div>
                 </div>
@@ -539,7 +547,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 </Button>
                 <Button
                   onClick={submitOrder}
-                  disabled={isLoading || cartItems.length === 0}
+                  disabled={isLoading || cartItems.length === 0 || !!activeOrder}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
                 >
                   {isLoading ? (
