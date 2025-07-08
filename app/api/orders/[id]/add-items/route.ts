@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const body = await request.json();
-    const { items }: { items: OrderItem[] } = body;
+    const { items, sessionId }: { items: OrderItem[], sessionId: string } = body;
 
     // Validate input
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -18,12 +18,24 @@ export async function POST(
         { status: 400 }
       );
     }
+    
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'Session ID is required for user isolation' },
+        { status: 400 }
+      );
+    }
 
     await connectDB();
 
-    const order = await Order.findOne({ orderId: params.id });
+    // CRITICAL: Find order by ID AND sessionId to prevent users from modifying other people's orders
+    const order = await Order.findOne({ 
+      orderId: params.id,
+      sessionId: sessionId // Ensure user can only modify their own orders
+    });
+    
     if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Order not found or access denied' }, { status: 404 });
     }
 
     // Check if order can be modified (only unpaid orders)

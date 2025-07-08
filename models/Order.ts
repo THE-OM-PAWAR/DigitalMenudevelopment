@@ -8,11 +8,14 @@ export interface IOrderItem {
   price: number;
   quantityId: string;
   quantityDescription: string;
+  addedAt?: Date; // Track when item was added
+  isNewlyAdded?: boolean; // Flag for newly added items
 }
 
 export interface IOrder extends Document {
   orderId: string;
   outletId: mongoose.Types.ObjectId;
+  sessionId: string; // User session ID for proper isolation
   items: IOrderItem[];
   totalAmount: number;
   orderStatus: OrderStatus;
@@ -24,6 +27,7 @@ export interface IOrder extends Document {
     created: Date;
     updated: Date;
   };
+  lastItemAddedAt?: Date; // Track when last item was added
 }
 
 const OrderItemSchema = new Schema<IOrderItem>({
@@ -33,6 +37,8 @@ const OrderItemSchema = new Schema<IOrderItem>({
   price: { type: Number, required: true, min: 0 },
   quantityId: { type: String, required: true },
   quantityDescription: { type: String, required: true },
+  addedAt: { type: Date, default: Date.now },
+  isNewlyAdded: { type: Boolean, default: false },
 }, { _id: false });
 
 const OrderSchema = new Schema<IOrder>({
@@ -45,6 +51,11 @@ const OrderSchema = new Schema<IOrder>({
     type: Schema.Types.ObjectId,
     ref: 'Outlet',
     required: true,
+  },
+  sessionId: {
+    type: String,
+    required: true,
+    index: true, // Index for fast filtering
   },
   items: [OrderItemSchema],
   totalAmount: {
@@ -84,6 +95,10 @@ const OrderSchema = new Schema<IOrder>({
       type: Date,
       default: Date.now,
     },
+  },
+  lastItemAddedAt: {
+    type: Date,
+    default: Date.now,
   },
 }, {
   timestamps: false, // We're handling timestamps manually

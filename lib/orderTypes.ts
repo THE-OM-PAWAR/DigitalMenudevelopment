@@ -25,6 +25,7 @@ export interface OrderItem {
 export interface Order {
   orderId: string;
   outletId: string;
+  sessionId: string; // User session ID for proper isolation
   items: OrderItem[];
   totalAmount: number;
   orderStatus: OrderStatus;

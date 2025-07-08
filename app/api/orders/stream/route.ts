@@ -27,21 +27,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Public endpoint: no authentication required for menu/guest access
-    // const user = getAuthUser(request);
-    // if (!user) {
-    //   return new Response('Unauthorized', { status: 401 });
-    // }
-
-    // Get outlet ID from query params
+    // Get parameters from query params
     const { searchParams } = new URL(request.url);
     const outletId = searchParams.get('outletId');
+    const sessionId = searchParams.get('sessionId');
     
     if (!outletId) {
       return new Response('Outlet ID is required', { status: 400 });
     }
+    
+    if (!sessionId) {
+      return new Response('Session ID is required for proper user isolation', { status: 400 });
+    }
 
-    console.log(`Starting SSE stream for outlet: ${outletId}`);
+    console.log(`Starting SSE stream for outlet: ${outletId}, session: ${sessionId}`);
 
     const client = await connectToMongo();
     const db = client.db();
@@ -78,9 +77,10 @@ export async function GET(request: NextRequest) {
         // Send initial connection message
         const initialMessage = `data: ${JSON.stringify({
           type: 'connection',
-          message: 'Connected to order stream',
+          message: 'Connected to user-specific order stream',
           timestamp: new Date().toISOString(),
-          outletId
+          outletId,
+          sessionId
         })}\n\n`;
         safeEnqueue(initialMessage);
 
@@ -90,11 +90,12 @@ export async function GET(request: NextRequest) {
             throw new Error('Invalid outlet ID format');
           }
 
-          // Create change stream with filter for the specific outlet
+          // Create change stream with filter for the specific outlet AND session (CRITICAL FOR USER ISOLATION)
           const pipeline = [
             {
               $match: {
                 'fullDocument.outletId': new ObjectId(outletId),
+                'fullDocument.sessionId': sessionId, // ONLY show orders for this specific user session
                 $or: [
                   { operationType: 'insert' },
                   { operationType: 'update' },
@@ -109,16 +110,17 @@ export async function GET(request: NextRequest) {
             fullDocumentBeforeChange: 'whenAvailable'
           });
 
-          console.log(`Change stream created for outlet: ${outletId}`);
+          console.log(`Change stream created for outlet: ${outletId}, session: ${sessionId}`);
 
           // Listen for changes
           changeStream.on('change', (change: any) => {
             if (isClosed) return;
 
-            console.log('Order change detected:', {
+            console.log('Order change detected for user session:', {
               operationType: change.operationType,
               orderId: change.fullDocument?.orderId,
-              outletId: change.fullDocument?.outletId
+              outletId: change.fullDocument?.outletId,
+              sessionId: change.fullDocument?.sessionId
             });
 
             try {

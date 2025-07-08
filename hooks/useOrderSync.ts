@@ -5,6 +5,7 @@ import { useSSE } from '@/hooks/useSSE';
 import { Order, OrderItem, OrderStatus, PaymentStatus } from '@/lib/orderTypes';
 import axios from 'axios';
 import { toast } from '@/hooks/use-toast';
+import { getOrCreateSessionId } from '@/lib/sessionUtils';
 // Notification sound
 const playNotificationSound = () => {
   const audio = new window.Audio('/notification.mp3');
@@ -37,17 +38,18 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
   });
   const [hasNetworkError, setHasNetworkError] = useState(false);
   const [toastShown, setToastShown] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
 
   const syncTimeoutRef = useRef<NodeJS.Timeout>();
   const mountedRef = useRef(true);
 
-  // Storage keys
+  // Storage keys - include sessionId for proper user isolation
   const getStorageKeys = useCallback(() => ({
-    activeOrder: `activeOrder-${outletId}`,
-    activeOrders: `activeOrders-${outletId}`,
-    orderHistory: `orderHistory-${outletId}`,
-    lastSync: `lastSync-${outletId}`,
-  }), [outletId]);
+    activeOrder: `activeOrder-${outletId}-${sessionId}`,
+    activeOrders: `activeOrders-${outletId}-${sessionId}`,
+    orderHistory: `orderHistory-${outletId}-${sessionId}`,
+    lastSync: `lastSync-${outletId}-${sessionId}`,
+  }), [outletId, sessionId]);
 
   // Helper to determine primary active order (unpaid orders get priority)
   const getPrimaryActiveOrder = useCallback((orders: Order[]): Order | null => {
@@ -65,7 +67,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
 
   // Load data from localStorage
   const loadFromStorage = useCallback(() => {
-    if (!outletId) return { activeOrder: null, activeOrders: [], orderHistory: [], lastSyncTime: 0 };
+    if (!outletId || !sessionId) return { activeOrder: null, activeOrders: [], orderHistory: [], lastSyncTime: 0 };
 
     const keys = getStorageKeys();
     try {
@@ -94,11 +96,11 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
       console.error('Error loading from storage:', error);
       return { activeOrder: null, activeOrders: [], orderHistory: [], lastSyncTime: 0 };
     }
-  }, [getStorageKeys, outletId, getPrimaryActiveOrder]);
+  }, [getStorageKeys, outletId, sessionId, getPrimaryActiveOrder]);
 
   // Save data to localStorage
   const saveToStorage = useCallback((data: Partial<OrderSyncState>) => {
-    if (!outletId) return;
+    if (!outletId || !sessionId) return;
 
     const keys = getStorageKeys();
     try {
@@ -114,7 +116,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     } catch (error) {
       console.error('Error saving to storage:', error);
     }
-  }, [getStorageKeys, outletId]);
+  }, [getStorageKeys, outletId, sessionId]);
 
   // Check if order is completed
   const isOrderCompleted = useCallback((order: Order) => {
@@ -279,9 +281,10 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     console.error('SSE error:', error);
   }, []);
 
-  // Initialize SSE connection only if outletId is valid
+  // Initialize SSE connection only if outletId and sessionId are valid
   const { isConnected, connectionStatus, reconnect: sseReconnect } = useSSE({
     outletId: outletId && outletId.length === 24 ? outletId : undefined, // Only connect if valid ObjectId
+    sessionId: sessionId || undefined, // Only connect if sessionId is available
     onNewOrder: handleNewOrder,
     onOrderUpdate: handleOrderUpdate,
     onOrderComplete: handleOrderComplete,
@@ -300,6 +303,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
   // Fetch order data from server
   const fetchOrderData = useCallback(async (orderId?: string) => {
     if (!orderId && !syncState.activeOrder) return;
+    if (!sessionId) return; // Can't fetch without sessionId
 
     const targetOrderId = orderId || syncState.activeOrder?.orderId;
     if (!targetOrderId || !mountedRef.current) return;
@@ -307,8 +311,8 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     setSyncState(prev => ({ ...prev, isLoading: true }));
 
     try {
-      console.log('Fetching order data for:', targetOrderId);
-      const response = await axios.get(`/api/orders/${targetOrderId}`);
+      console.log('Fetching order data for:', targetOrderId, 'session:', sessionId);
+      const response = await axios.get(`/api/orders/${targetOrderId}?sessionId=${sessionId}`);
       const order = response.data.order;
 
       if (order && mountedRef.current) {
@@ -324,7 +328,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
         });
       }
       console.error('Error fetching order data:', error);
-      // If order not found, it might have been completed
+      // If order not found, it might have been completed or access denied
       if (axios.isAxiosError(error) && error.response?.status === 404 && mountedRef.current) {
         setSyncState(prev => {
           const newActiveOrders = prev.activeOrders.filter((o: Order) => o.orderId !== targetOrderId);
@@ -338,11 +342,17 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
         setSyncState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [syncState.activeOrder, updateActiveOrder, saveToStorage]);
+  }, [syncState.activeOrder, sessionId, updateActiveOrder, saveToStorage, getPrimaryActiveOrder]);
 
-  // Load initial data from storage
+  // Initialize sessionId and load initial data from storage
   useEffect(() => {
     mountedRef.current = true;
+    
+    // Get or create session ID for this user
+    const userSessionId = getOrCreateSessionId();
+    setSessionId(userSessionId);
+    console.log('User session ID:', userSessionId);
+    
     loadFromStorage();
 
     return () => {
@@ -368,18 +378,19 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
     customerName?: string;
     tableNumber?: string;
   }) => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || !sessionId) return;
 
     try {
       setSyncState(prev => ({ ...prev, isLoading: true }));
 
       const response = await axios.post('/api/orders', {
         ...orderData,
-        outletId
+        outletId,
+        sessionId // Include sessionId for proper user isolation
       });
 
       const newOrder = response.data.order;
-      console.log('Order created:', newOrder.orderId);
+      console.log('Order created with session isolation:', newOrder.orderId, 'session:', sessionId);
 
       // The SSE stream will automatically pick up this new order
       // No need to manually emit events like with Socket.IO
@@ -403,7 +414,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
         setSyncState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [outletId, updateActiveOrder]);
+  }, [outletId, sessionId, updateActiveOrder]);
 
   const updateOrder = useCallback(async (orderId: string, updates: Partial<Order>) => {
     if (!mountedRef.current) return;
@@ -441,15 +452,18 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
   }, [updateActiveOrder]);
 
   const addItemsToOrder = useCallback(async (orderId: string, items: OrderItem[]) => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || !sessionId) return;
 
     try {
       setSyncState(prev => ({ ...prev, isLoading: true }));
 
-      const response = await axios.post(`/api/orders/${orderId}/add-items`, { items });
+      const response = await axios.post(`/api/orders/${orderId}/add-items`, { 
+        items, 
+        sessionId // Include sessionId for security validation
+      });
       const updatedOrder = response.data.order;
 
-      console.log('Items added to order:', updatedOrder.orderId);
+      console.log('Items added to order with session validation:', updatedOrder.orderId, 'session:', sessionId);
 
       if (mountedRef.current) {
         updateActiveOrder(updatedOrder);
@@ -471,7 +485,7 @@ export function useOrderSync({ outletId, onOrderUpdate, onOrderComplete }: UseOr
         setSyncState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [updateActiveOrder]);
+  }, [updateActiveOrder, sessionId]);
 
   const refreshOrder = useCallback(() => {
     if (!mountedRef.current) return;

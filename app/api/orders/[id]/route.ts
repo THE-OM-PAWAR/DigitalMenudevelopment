@@ -9,16 +9,34 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = getAuthUser(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // For customer-facing order retrieval, we need sessionId instead of auth
+    const sessionId = request.nextUrl.searchParams.get('sessionId');
+    
+    // If no sessionId, check for admin auth (for dashboard access)
+    if (!sessionId) {
+      const user = getAuthUser(request);
+      if (!user) {
+        return NextResponse.json({ error: 'Session ID required or unauthorized access' }, { status: 401 });
+      }
+      
+      // Admin access - can view any order
+      await connectDB();
+      const order = await Order.findOne({ orderId: params.id });
+      if (!order) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      }
+      return NextResponse.json({ order });
     }
 
+    // Customer access with sessionId - only their own orders
     await connectDB();
-
-    const order = await Order.findOne({ orderId: params.id });
+    const order = await Order.findOne({ 
+      orderId: params.id,
+      sessionId: sessionId // Ensure customer can only access their own orders
+    });
+    
     if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Order not found or access denied' }, { status: 404 });
     }
 
     return NextResponse.json({ order });

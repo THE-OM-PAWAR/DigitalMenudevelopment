@@ -15,6 +15,7 @@ interface SSEMessage {
 
 interface UseSSEProps {
   outletId?: string;
+  sessionId?: string;
   onNewOrder?: (order: Order) => void;
   onOrderUpdate?: (order: Order) => void;
   onOrderComplete?: (order: Order) => void;
@@ -25,6 +26,7 @@ interface UseSSEProps {
 
 export function useSSE({
   outletId,
+  sessionId,
   onNewOrder,
   onOrderUpdate,
   onOrderComplete,
@@ -58,15 +60,15 @@ export function useSSE({
   }, []);
 
   const connect = useCallback(() => {
-    if (!mountedRef.current || !outletId || isInitializedRef.current) return;
+    if (!mountedRef.current || !outletId || !sessionId || isInitializedRef.current) return;
     
     isInitializedRef.current = true;
     isManuallyClosedRef.current = false;
     
-    console.log('Attempting connection for outlet:', outletId);
+    console.log('Attempting connection for outlet:', outletId, 'session:', sessionId);
 
     try {
-      const url = `/api/orders/stream?outletId=${outletId}`;
+      const url = `/api/orders/stream?outletId=${outletId}&sessionId=${sessionId}`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
@@ -131,7 +133,7 @@ export function useSSE({
     } catch (error) {
       console.error('Error creating SSE connection:', error);
     }
-  }, [outletId, onNewOrder, onOrderUpdate, onOrderComplete, onError, onConnect, cleanup]);
+  }, [outletId, sessionId, onNewOrder, onOrderUpdate, onOrderComplete, onError, onConnect, cleanup]);
 
   const disconnect = useCallback(() => {
     console.log('Manually disconnecting');
@@ -160,11 +162,11 @@ export function useSSE({
     }
   }, [cleanup, connect]);
 
-  // Initialize connection when outletId is available
+  // Initialize connection when outletId and sessionId are available
   useEffect(() => {
     mountedRef.current = true;
     
-    if (outletId && !isInitializedRef.current) {
+    if (outletId && sessionId && !isInitializedRef.current) {
       const timer = setTimeout(() => {
         if (mountedRef.current) {
           connect();
@@ -173,7 +175,7 @@ export function useSSE({
       
       return () => clearTimeout(timer);
     }
-  }, [outletId, connect]);
+  }, [outletId, sessionId, connect]);
 
   // Cleanup on unmount
   useEffect(() => {
