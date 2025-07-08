@@ -13,7 +13,8 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, Dr
 import { 
   ShoppingCart, Plus, Minus, Trash2, User, Hash, 
   MessageSquare, CreditCard, CheckCircle, Loader2, Clock, History, Edit3, X,
-  Wifi, WifiOff, RefreshCw, AlertCircle
+  Wifi, WifiOff, RefreshCw, AlertCircle,
+  ChevronRight
 } from 'lucide-react';
 import { OrderItem, Order, OrderStatus, PaymentStatus } from '@/lib/orderTypes';
 import { useOrderSync } from '@/hooks/useOrderSync';
@@ -33,6 +34,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
   const [comments, setComments] = useState('');
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editOrderItems, setEditOrderItems] = useState<OrderItem[]>([]);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
 
   const {
     activeOrder,
@@ -43,7 +45,8 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     createOrder,
     updateOrder,
     refreshOrder,
-    isOrderCompleted
+    isOrderCompleted,
+    hasNetworkError
   } = useOrderSync({
     outletId,
     onOrderUpdate: (order) => {
@@ -53,6 +56,14 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
       console.log('Order completed:', order.orderId);
     }
   });
+
+  useEffect(() => {
+    if (hasNetworkError) {
+      setShowOfflineModal(true);
+    } else {
+      setShowOfflineModal(false);
+    }
+  }, [hasNetworkError]);
 
   const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -190,157 +201,122 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
 
   return (
     <>
-      {/* Connection Status Indicator */}
-      <div className="fixed top-4 right-4 z-50">
-        <div className={`flex items-center space-x-2 px-3 py-2 rounded-full text-sm font-medium ${
-          connectionStatus === 'connected' 
-            ? 'bg-green-100 text-green-800' 
-            : connectionStatus === 'reconnecting'
-            ? 'bg-yellow-100 text-yellow-800'
-            : 'bg-red-100 text-red-800'
-        }`}>
-          {connectionStatus === 'connected' ? (
-            <>
-              <Wifi className="h-4 w-4" />
-              <span>Live</span>
-            </>
-          ) : connectionStatus === 'reconnecting' ? (
-            <>
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>Reconnecting</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-4 w-4" />
-              <span>Offline</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* History Button */}
-      {(orderHistory.length > 0 || activeOrder) && (
-        <div className="fixed top-20 right-4 z-40">
-          <Button
-            onClick={() => setShowHistory(true)}
-            variant="outline"
-            size="sm"
-            className="bg-white shadow-md border-gray-300"
-          >
-            <History className="h-4 w-4 mr-2" />
-            {activeOrder ? 'Track Order' : `History (${orderHistory.length})`}
-          </Button>
-        </div>
-      )}
-
       {/* Floating Cart/Order Status */}
       <div className="fixed bottom-4 left-4 right-4 z-50">
         {activeOrder ? (
-          <Card className="shadow-lg border-2 bg-white" style={{
-            borderColor: activeOrder.orderStatus === OrderStatus.TAKEN ? '#f59e0b' : 
-                        activeOrder.orderStatus === OrderStatus.PREPARING ? '#3b82f6' :
-                        activeOrder.orderStatus === OrderStatus.PREPARED ? '#10b981' : '#6b7280'
-          }}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    {getStatusIcon(activeOrder.orderStatus)}
-                    {/* Connection indicator */}
-                    <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
-                      isConnected ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      Order {activeOrder.orderId.split('-')[1]}
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="secondary" className={`text-xs ${getStatusColor(activeOrder.orderStatus)}`}>
-                        {activeOrder.orderStatus}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        ₹{activeOrder.totalAmount.toFixed(2)}
-                      </Badge>
-                      <Badge variant="outline" className={`text-xs ${getPaymentColor(activeOrder.paymentStatus)}`}>
-                        {activeOrder.paymentStatus}
-                      </Badge>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="View Order Details"
+            onClick={() => setShowHistory(true)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setShowHistory(true); }}
+            className="focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-lg"
+            style={{ cursor: 'pointer' }}
+          >
+            <Card className="shadow-lg border-2 bg-white" style={{
+              borderColor: activeOrder.orderStatus === OrderStatus.TAKEN ? '#f59e0b' : 
+                          activeOrder.orderStatus === OrderStatus.PREPARING ? '#3b82f6' :
+                          activeOrder.orderStatus === OrderStatus.PREPARED ? '#10b981' : '#6b7280'
+            }}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      {getStatusIcon(activeOrder.orderStatus)}
+                      {/* Connection indicator */}
+                      <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
+                        isConnected ? 'bg-green-500' : 'bg-red-500'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        Order {activeOrder.orderId.split('-')[1]}
+                      </p>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="secondary" className={`text-xs ${getStatusColor(activeOrder.orderStatus)}`}>
+                          {activeOrder.orderStatus}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${getPaymentColor(activeOrder.paymentStatus)}`}>
+                          {activeOrder.paymentStatus}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {!isConnected && (
-                    <Button
-                      onClick={refreshOrder}
-                      size="sm"
-                      variant="outline"
-                      className="border-orange-300 text-orange-600 hover:bg-orange-50"
-                      disabled={isLoading}
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
-                      Sync
-                    </Button>
-                  )}
-                  {canEditOrder(activeOrder.orderStatus, activeOrder.paymentStatus) && (
-                    <Button
-                      onClick={() => handleEditOrder(activeOrder)}
-                      size="sm"
-                      variant="outline"
-                      className="border-orange-300 text-orange-600 hover:bg-orange-50"
-                    >
-                      <Edit3 className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                  )}
-                  <Button
-                    onClick={() => setShowHistory(true)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    View Details
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Show offline warning */}
-              {!isConnected && (
-                <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-center space-x-2">
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                    <p className="text-xs text-yellow-800">
-                      Connection lost. Order updates may be delayed.
-                    </p>
+                    {!isConnected && (
+                      <Button
+                        onClick={e => { e.stopPropagation(); refreshOrder(); }}
+                        size="sm"
+                        variant="outline"
+                        className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                        disabled={isLoading}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+                        Sync
+                      </Button>
+                    )}
+                    {canEditOrder(activeOrder.orderStatus, activeOrder.paymentStatus) && (
+                      <Button
+                        onClick={e => { e.stopPropagation(); handleEditOrder(activeOrder); }}
+                        size="sm"
+                        variant="outline"
+                        className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                      >
+                        <Edit3 className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    )}
+                    {/* If no Edit button, show right arrow */}
+                    {!canEditOrder(activeOrder.orderStatus, activeOrder.paymentStatus) && (
+                      <ChevronRight className="h-6 w-6 text-gray-400 ml-2" />
+                    )}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                
+                {/* Show offline warning */}
+                {!isConnected && (
+                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                      <p className="text-xs text-yellow-800">
+                        Connection lost. Order updates may be delayed.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         ) : (
-          <Card className="shadow-lg border-2 border-orange-500 bg-white">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    <ShoppingCart className="h-6 w-6 text-orange-600" />
-                    <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-orange-600 text-white text-xs">
-                      {totalItems}
-                    </Badge>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Open Checkout"
+            onClick={() => setIsCheckoutOpen(true)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setIsCheckoutOpen(true); }}
+            className="focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-lg"
+            style={{ cursor: 'pointer' }}
+          >
+            <Card className="shadow-lg border-2 border-orange-500 bg-white">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <ShoppingCart className="h-6 w-6 text-orange-600" />
+                      <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-orange-600 text-white text-xs">
+                        {totalItems}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">₹{totalAmount.toFixed(2)}</p>
+                      <p className="text-sm text-gray-600">{totalItems} items</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">₹{totalAmount.toFixed(2)}</p>
-                    <p className="text-sm text-gray-600">{totalItems} items</p>
-                  </div>
+                  <ChevronRight className="h-6 w-6 text-gray-400 ml-2" />
                 </div>
-                <Button 
-                  onClick={handleCheckout} 
-                  className="bg-orange-600 hover:bg-orange-700 text-white"
-                  disabled={!isConnected}
-                >
-                  {!isConnected ? 'Offline' : 'Checkout'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
 
@@ -398,6 +374,33 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
       {/* Checkout Drawer */}
       <Drawer open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
         <DrawerContent className="max-h-[90vh]">
+          {/* Connection Status Indicator (inside drawer) */}
+          <div className="flex justify-end mb-2">
+            <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${
+              connectionStatus === 'connected' 
+                ? 'bg-green-100 text-green-800' 
+                : connectionStatus === 'reconnecting'
+                ? 'bg-yellow-100 text-yellow-800'
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {connectionStatus === 'connected' ? (
+                <>
+                  <Wifi className="h-3 w-3" />
+                  <span>Live</span>
+                </>
+              ) : connectionStatus === 'reconnecting' ? (
+                <>
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  <span>Reconnecting</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-3 w-3" />
+                  <span>Offline</span>
+                </>
+              )}
+            </div>
+          </div>
           <DrawerHeader>
             <DrawerTitle className="flex items-center">
               <ShoppingCart className="h-5 w-5 mr-2" />
@@ -812,6 +815,37 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
           </div>
         </DrawerContent>
       </Drawer> 
+
+      {/* Offline Modal */}
+      <Dialog open={showOfflineModal} onOpenChange={setShowOfflineModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="text-center">
+            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="h-8 w-8 text-yellow-600" />
+            </div>
+            <DialogTitle className="text-xl font-bold text-yellow-600">
+              Connection Lost
+            </DialogTitle>
+            <DialogDescription>
+              You are currently offline. Please reload the page to try reconnecting.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center mt-4 space-x-2">
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={() => window.location.reload()}
+            >
+              Reload Page
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowOfflineModal(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

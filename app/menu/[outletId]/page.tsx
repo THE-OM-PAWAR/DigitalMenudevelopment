@@ -11,12 +11,13 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, Dr
 import { Separator } from '@/components/ui/separator';
 import { 
   Store, Search, Leaf, Beef, MapPin, Phone, 
-  ChefHat, Utensils, Star, Clock, Grid3X3, Plus, Minus, ShoppingCart, History, Wifi, WifiOff
+  ChefHat, Utensils, Star, Clock, Grid3X3, Plus, Minus, ShoppingCart, History, Wifi, WifiOff, RefreshCw
 } from 'lucide-react';
 import ThemeProvider from '@/components/ThemeProvider';
 import OrderCart from '@/components/OrderCart';
-import { OrderItem } from '@/lib/orderTypes';
+import { OrderItem, Order, OrderStatus, PaymentStatus } from '@/lib/orderTypes';
 import axios from 'axios';
+import { useOrderSync } from '@/hooks/useOrderSync';
 
 interface Outlet {
   _id: string;
@@ -70,6 +71,16 @@ export default function PublicMenuPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [error, setError] = useState<string>('');
+  const [showHistory, setShowHistory] = useState(false);
+  const {
+    activeOrder,
+    orderHistory,
+    isLoading: orderSyncLoading,
+    connectionStatus,
+    refreshOrder
+  } = useOrderSync({
+    outletId,
+  });
 
   useEffect(() => {
     if (outletId) {
@@ -276,50 +287,63 @@ export default function PublicMenuPage() {
                 </div>
               </div>
 
-              {/* Right - Location Button */}
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex items-center space-x-1" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>
-                    <MapPin className="h-4 w-4" />
-                    <span className="hidden sm:inline">Location</span>
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-80" style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
-                  <SheetHeader>
-                    <SheetTitle style={{ color: 'var(--theme-text)' }}>Location & Contact</SheetTitle>
-                    <SheetDescription style={{ color: 'var(--theme-text-secondary)' }}>
-                      Find us and get in touch
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="mt-6 space-y-4">
-                    {outlet.address && (
-                      <div className="flex items-start space-x-3">
-                        <MapPin className="h-5 w-5 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
-                        <div>
-                          <p className="font-medium" style={{ color: 'var(--theme-text)' }}>Address</p>
-                          <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>{outlet.address}</p>
+              {/* Right - Location Button and Order History Button */}
+              <div className="flex items-center space-x-2">
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex items-center space-x-1" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>
+                      <MapPin className="h-4 w-4" />
+                      <span className="hidden sm:inline">Location</span>
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-80" style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
+                    <SheetHeader>
+                      <SheetTitle style={{ color: 'var(--theme-text)' }}>Location & Contact</SheetTitle>
+                      <SheetDescription style={{ color: 'var(--theme-text-secondary)' }}>
+                        Find us and get in touch
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="mt-6 space-y-4">
+                      {outlet.address && (
+                        <div className="flex items-start space-x-3">
+                          <MapPin className="h-5 w-5 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
+                          <div>
+                            <p className="font-medium" style={{ color: 'var(--theme-text)' }}>Address</p>
+                            <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>{outlet.address}</p>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {outlet.phone && (
-                      <div className="flex items-start space-x-3">
-                        <Phone className="h-5 w-5 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
-                        <div>
-                          <p className="font-medium" style={{ color: 'var(--theme-text)' }}>Phone</p>
-                          <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>{outlet.phone}</p>
+                      )}
+                      {outlet.phone && (
+                        <div className="flex items-start space-x-3">
+                          <Phone className="h-5 w-5 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
+                          <div>
+                            <p className="font-medium" style={{ color: 'var(--theme-text)' }}>Phone</p>
+                            <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>{outlet.phone}</p>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    <div className="flex items-start space-x-3">
-                      <Clock className="h-5 w-5 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
-                      <div>
-                        <p className="font-medium" style={{ color: 'var(--theme-text)' }}>Hours</p>
-                        <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>Open • Closes 11:00 PM</p>
+                      )}
+                      <div className="flex items-start space-x-3">
+                        <Clock className="h-5 w-5 mt-0.5" style={{ color: 'var(--theme-accent)' }} />
+                        <div>
+                          <p className="font-medium" style={{ color: 'var(--theme-text)' }}>Hours</p>
+                          <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>Open • Closes 11:00 PM</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
+                  </SheetContent>
+                </Sheet>
+                {/* Order History/Tracking Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center space-x-1"
+                  style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+                  onClick={() => setShowHistory(true)}
+                >
+                  <History className="h-4 w-4" />
+                  <span className="hidden sm:inline">Orders</span>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -490,21 +514,21 @@ export default function PublicMenuPage() {
                 {/* All Categories Button */}
                 <div
                   onClick={() => setSelectedCategory('all')}
-                  className={`flex-shrink-0 w-28 h-28 cursor-pointer rounded-2xl relative overflow-hidden snap-start transition-all`}
-                  style={{ 
-                    backgroundColor: 'var(--theme-surface)',
-                    borderColor: selectedCategory === 'all' ? 'var(--theme-primary)' : 'transparent',
-                    borderWidth: selectedCategory === 'all' ? 2 : 0,
-                    borderStyle: 'solid'
+                  className={`flex-shrink-0 w-28 h-28 cursor-pointer rounded-xl relative overflow-hidden snap-start transition-all border ${selectedCategory === 'all' ? 'border-orange-500 shadow-lg' : 'border-transparent hover:border-gray-300 hover:shadow'} group`}
+                  style={{
+                    background: selectedCategory === 'all'
+                      ? 'linear-gradient(135deg, #fbbf24 0%, #f87171 100%)'
+                      : 'var(--theme-surface)',
                   }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-gray-400 to-gray-600"></div>
-                  <div className="absolute inset-0 bg-black bg-opacity-40"></div>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                    <Grid3X3 className="h-8 w-8 mb-2" />
-                    <span className="text-sm font-semibold text-center leading-tight">All</span>
-                    <span className="text-sm opacity-90">{items.length}</span>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-10">
+                    <div className={`flex items-center justify-center rounded-full bg-white/20 mb-2 transition-all ${selectedCategory === 'all' ? 'scale-110' : ''}`} style={{ width: 36, height: 36 }}>
+                      <Grid3X3 className="h-6 w-6 text-white" />
+                    </div>
+                    <span className="text-xs font-semibold text-center leading-tight">All</span>
+                    <span className="text-xs opacity-80 mt-1">{items.length}</span>
                   </div>
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-all" />
                 </div>
                 
                 {categories.map((category) => {
@@ -601,19 +625,19 @@ export default function PublicMenuPage() {
                                     className="w-12 h-12 object-cover rounded-lg"
                                   />
                                 ) : (
-                                  <div className="w-16 h-16 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--theme-background)' }}>
+                                  <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--theme-background)' }}>
                                     <Utensils className="h-6 w-6" style={{ color: 'var(--theme-text-secondary)' }} />
                                   </div>
                                 )}
                                 <div className="absolute -top-1 -left-1">
                                   <div 
-                                    className="w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                                    className="w-3 h-3 rounded-full border-2 flex items-center justify-center"
                                     style={{
                                       backgroundColor: item.isVeg ? 'var(--theme-veg)' : 'var(--theme-non-veg)',
                                       borderColor: item.isVeg ? 'var(--theme-veg)' : 'var(--theme-non-veg)',
                                     }}
                                   >
-                                    <div className="w-2 h-2 rounded-full bg-white" />
+                                    <div className="w-1 h-1 rounded-full bg-white" />
                                   </div>
                                 </div>
                               </div>
@@ -628,7 +652,7 @@ export default function PublicMenuPage() {
                               {/* Price and Add Button */}
                               <div className="flex-shrink-0 flex items-center space-x-3">
                                 <div className="text-right">
-                                  <p className="font-bold text-lg" style={{ color: 'var(--theme-accent)' }}>
+                                  <p className="font-bold text-md" style={{ color: 'var(--theme-accent)' }}>
                                     ₹{item.quantityPrices[0]?.price.toFixed(0)}
                                   </p>
                                   {item.quantityPrices.length > 1 && (
@@ -668,10 +692,10 @@ export default function PublicMenuPage() {
                                         <Button
                                           onClick={() => addToCart(item, firstQuantityPrice)}
                                           size="sm"
-                                          className="bg-orange-600 hover:bg-orange-700 text-white"
+                                          className="bg-orange-600 hover:bg-orange-700 text-white h-8 w-8 p-0"
                                         >
-                                          <Plus className="h-4 w-4 mr-1" />
-                                          Add
+                                          <Plus className="h-4 w-4" />
+                                          
                                         </Button>
                                       );
                                     })()}
@@ -716,12 +740,12 @@ export default function PublicMenuPage() {
                                         borderStyle: 'solid'
                                       }}
                                     >
-                                      <div>
-                                        <span className="font-semibold text-lg" style={{ color: 'var(--theme-text)' }}>{qp.quantityId.value}</span>
+                                      <div className='flex-row flex'>
+                                        <span className="font-semibold text-md" style={{ color: 'var(--theme-text)' }}>{qp.quantityId.value}</span>
                                         <span className="text-sm ml-2 block" style={{ color: 'var(--theme-text-secondary)' }}>({qp.quantityId.description})</span>
                                       </div>
                                       <div className="flex items-center space-x-3">
-                                        <span className="text-xl font-bold" style={{ color: 'var(--theme-accent)' }}>
+                                        <span className="text-lg font-bold" style={{ color: 'var(--theme-accent)' }}>
                                           ₹{qp.price.toFixed(2)}
                                         </span>
                                         {outlet.orderManagementEnabled && (
@@ -752,8 +776,7 @@ export default function PublicMenuPage() {
                                                 size="sm"
                                                 className="bg-orange-600 hover:bg-orange-700 text-white"
                                               >
-                                                <Plus className="h-4 w-4 mr-1" />
-                                                Add
+                                                <Plus className="h-4 w-4" />
                                               </Button>
                                             )}
                                           </div>
@@ -817,6 +840,137 @@ export default function PublicMenuPage() {
             onUpdateCart={setCartItems}
           />
         )}
+
+        {/* Order History/Tracking Drawer */}
+        <Drawer open={showHistory} onOpenChange={setShowHistory}>
+          <DrawerContent className="max-h-[90vh]">
+            <DrawerHeader>
+              <DrawerTitle className="flex items-center">
+                <History className="h-5 w-5 mr-2" />
+                {activeOrder ? 'Order Tracking' : 'Order History'}
+              </DrawerTitle>
+              <DrawerDescription>
+                {activeOrder ? 'Track your current order status in real-time' : 'View your previous orders'}
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="px-4 pb-6 overflow-y-auto">
+              <div className="space-y-4">
+                {/* Current Active Order */}
+                {activeOrder && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-green-600">Current Order</h3>
+                      <div className="flex items-center space-x-2">
+                        {connectionStatus === 'connected' ? (
+                          <div className="flex items-center space-x-1 text-green-600">
+                            <Wifi className="h-4 w-4" />
+                            <span className="text-xs">Live</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1 text-red-600">
+                            <WifiOff className="h-4 w-4" />
+                            <span className="text-xs">Offline</span>
+                          </div>
+                        )}
+                        <Button
+                          onClick={refreshOrder}
+                          size="sm"
+                          variant="outline"
+                          disabled={orderSyncLoading}
+                        >
+                          <RefreshCw className={`h-4 w-4 ${orderSyncLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+                    </div>
+                    <Card className="border-green-200">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="font-semibold">{activeOrder.orderId}</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(activeOrder.timestamps.created).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="secondary" className={`mb-1 ${activeOrder.orderStatus === OrderStatus.TAKEN ? 'bg-blue-100 text-blue-800 border-blue-200' : activeOrder.orderStatus === OrderStatus.PREPARING ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : activeOrder.orderStatus === OrderStatus.PREPARED ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}`}>{activeOrder.orderStatus}</Badge>
+                            <Badge variant="outline" className={`mb-1 ml-1 ${activeOrder.paymentStatus === PaymentStatus.UNPAID ? 'bg-red-100 text-red-800 border-red-200' : activeOrder.paymentStatus === PaymentStatus.PAID ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}`}>{activeOrder.paymentStatus}</Badge>
+                            <p className="font-bold">₹{activeOrder.totalAmount.toFixed(2)}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {activeOrder.items.map((item, index) => (
+                            <div key={index} className="flex justify-between text-sm">
+                              <span>{item.quantity}x {item.name}</span>
+                              <span>₹{(item.quantity * item.price).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Order Progress */}
+                        <div className="mt-4 pt-4 border-t">
+                          <h4 className="text-sm font-medium mb-3">Order Progress</h4>
+                          <div className="space-y-2">
+                            {Object.values(OrderStatus).map((status, index) => {
+                              const isCompleted = Object.values(OrderStatus).indexOf(activeOrder.orderStatus) >= index;
+                              const isCurrent = activeOrder.orderStatus === status;
+                              return (
+                                <div key={status} className={`flex items-center space-x-3 ${isCompleted ? 'text-green-600' : 'text-gray-400'}`}>
+                                  <div className={`w-3 h-3 rounded-full ${isCompleted ? 'bg-green-600' : 'bg-gray-300'} ${isCurrent ? 'animate-pulse' : ''}`} />
+                                  <span className="text-sm capitalize">{status}</span>
+                                  {isCurrent && <span className="text-xs">(Current)</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+                {/* Order History */}
+                {orderHistory.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">Order History</h3>
+                    {orderHistory.map((order) => (
+                      <Card key={order.orderId} className="border-gray-200">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-semibold">{order.orderId}</p>
+                              <p className="text-sm text-gray-600">
+                                {new Date(order.timestamps.created).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <Badge variant="outline" className="mb-1">
+                                Completed
+                              </Badge>
+                              <p className="font-bold">₹{order.totalAmount.toFixed(2)}</p>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            {order.items.map((item, index) => (
+                              <div key={index} className="flex justify-between text-sm">
+                                <span>{item.quantity}x {item.name}</span>
+                                <span>₹{(item.quantity * item.price).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+                {!activeOrder && orderHistory.length === 0 && (
+                  <div className="text-center py-8">
+                    <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Orders Yet</h3>
+                    <p className="text-gray-600">Your order history will appear here</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </DrawerContent>
+        </Drawer>
 
         {/* Footer */}
         <footer className="border-t mt-8" style={{ backgroundColor: 'var(--theme-surface)', borderTopColor: 'var(--theme-border)' }}>

@@ -54,22 +54,30 @@ export default function OutletSettingsPage() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (outlet && outlet._id) {
+      fetchOrderManagementSetting(outlet._id);
+    }
+  }, [outlet]);
+
+  const fetchOrderManagementSetting = async (outletId: string) => {
+    try {
+      const settingsResponse = await axios.get(`/api/outlets/${outletId}/settings`);
+      setOrderManagementEnabled(!!settingsResponse.data.orderManagementEnabled);
+    } catch (error) {
+      setOrderManagementEnabled(false);
+    }
+  };
+
   const fetchOutlet = async () => {
     try {
-      const [outletResponse, settingsResponse] = await Promise.all([
-        axios.get('/api/outlets'),
-        axios.get('/api/outlets/settings').catch(() => ({ data: { orderManagementEnabled: false } }))
-      ]);
-      
+      const outletResponse = await axios.get('/api/outlets');
       const outletData = outletResponse.data.outlet;
-      
       if (!outletData) {
         router.push('/dashboard');
         return;
       }
-
       setOutlet(outletData);
-      setOrderManagementEnabled(settingsResponse.data.orderManagementEnabled || false);
       setFormData({
         name: outletData.name || '',
         logo: outletData.logo || '',
@@ -94,8 +102,9 @@ export default function OutletSettingsPage() {
   };
 
   const handleOrderManagementToggle = async (enabled: boolean) => {
+    if (!outlet || !outlet._id) return;
     try {
-      await axios.put(`/api/outlets/${outlet?._id}/settings`, {
+      await axios.put(`/api/outlets/${outlet._id}/settings`, {
         orderManagementEnabled: enabled
       });
       setOrderManagementEnabled(enabled);
