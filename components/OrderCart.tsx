@@ -79,6 +79,20 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
     return activeOrder && activeOrder.paymentStatus === PaymentStatus.UNPAID;
   };
 
+  // Helper function to check if customer can place a new order
+  const canPlaceNewOrder = () => {
+    // Can place new order if:
+    // 1. No active order
+    // 2. Active order is completed (served and paid)
+    // 3. Active order is paid but not served (customer can place another order)
+    if (!activeOrder) return true;
+    
+    const isCompleted = activeOrder.orderStatus === OrderStatus.SERVED && activeOrder.paymentStatus === PaymentStatus.PAID;
+    const isPaidButNotServed = activeOrder.paymentStatus === PaymentStatus.PAID && activeOrder.orderStatus !== OrderStatus.SERVED;
+    
+    return isCompleted || isPaidButNotServed;
+  };
+
   const updateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeItem(itemId);
@@ -110,7 +124,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
 
     try {
       if (canAddToActiveOrder()) {
-        // Add items to existing active order
+        // Add items to existing unpaid order
         await addItemsToOrder(activeOrder!.orderId, cartItems);
         
         setOrderSubmitted(true);
@@ -121,8 +135,8 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
         setCustomerName('');
         setTableNumber('');
         setComments('');
-      } else {
-        // Create new order
+      } else if (canPlaceNewOrder()) {
+        // Create new order (when no active order, completed order, or paid but not served order)
         const newOrder = await createOrder({
           items: cartItems,
           totalAmount,
@@ -434,12 +448,22 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
 
           <div className="px-4 pb-6 overflow-y-auto">
             <div className="space-y-6">
-              {activeOrder && !canAddToActiveOrder() && (
+              {activeOrder && !canAddToActiveOrder() && !canPlaceNewOrder() && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                   <div className="flex items-center space-x-2">
                     <AlertCircle className="h-4 w-4 text-yellow-600" />
                     <p className="text-sm text-yellow-800">
-                      You have an active paid order. You can add items for your next order, but cannot checkout until your current order is completed.
+                      You have an active unpaid order. Complete payment to place a new order.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {activeOrder && canPlaceNewOrder() && !canAddToActiveOrder() && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="h-4 w-4 text-green-600" />
+                    <p className="text-sm text-green-800">
+                      Your previous order is being prepared. You can place a new order now.
                     </p>
                   </div>
                 </div>
@@ -580,7 +604,7 @@ export default function OrderCart({ outletId, cartItems, onUpdateCart }: OrderCa
                 </Button>
                 <Button
                   onClick={submitOrder}
-                  disabled={isLoading || cartItems.length === 0 || (activeOrder && !canAddToActiveOrder())}
+                  disabled={isLoading || cartItems.length === 0 || (!canAddToActiveOrder() && !canPlaceNewOrder())}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
                 >
                   {isLoading ? (

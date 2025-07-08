@@ -156,25 +156,6 @@ export default function PublicMenuPage() {
   const addToCart = (item: Item, quantityPrice: { quantityId: { _id: string; value: string; description: string }; price: number }) => {
     const cartItemId = `${item._id}-${quantityPrice.quantityId._id}`;
     
-    // Check if we should add to active order instead of cart
-    const canAddToActiveOrder = activeOrder && activeOrder.paymentStatus === PaymentStatus.UNPAID;
-    
-    if (canAddToActiveOrder) {
-      // Add directly to active order
-      const newItem: OrderItem = {
-        id: cartItemId,
-        name: item.name,
-        quantity: 1,
-        price: quantityPrice.price,
-        quantityId: quantityPrice.quantityId._id,
-        quantityDescription: quantityPrice.quantityId.description,
-      };
-      
-      // Use the OrderSync hook to add items to the active order
-      // This would need to be implemented in the OrderCart component
-      // For now, we'll still add to cart and let OrderCart handle it
-    }
-    
     setCartItems(prev => {
       const existingItem = prev.find(cartItem => cartItem.id === cartItemId);
       
@@ -196,6 +177,11 @@ export default function PublicMenuPage() {
         return [...prev, newItem];
       }
     });
+  };
+
+  // Helper function to check if we should show "Add to Order" button
+  const shouldShowAddToOrder = () => {
+    return activeOrder && activeOrder.paymentStatus === PaymentStatus.UNPAID;
   };
 
   const updateCartItemQuantity = (itemId: string, newQuantity: number) => {
@@ -493,13 +479,13 @@ export default function PublicMenuPage() {
                                           onClick={() => addToCart(item, qp)}
                                           size="sm"
                                           className={`text-white ${
-                                            activeOrder && activeOrder.paymentStatus === PaymentStatus.UNPAID
+                                            shouldShowAddToOrder()
                                               ? 'bg-blue-600 hover:bg-blue-700'
                                               : 'bg-orange-600 hover:bg-orange-700'
                                           }`}
                                         >
                                           <Plus className="h-4 w-4 mr-1" />
-                                          {activeOrder && activeOrder.paymentStatus === PaymentStatus.UNPAID
+                                          {shouldShowAddToOrder()
                                             ? 'Add to Order'
                                             : 'Add'}
                                         </Button>
