@@ -82,4 +82,4 @@ Implemented a feature that allows customers to add items to existing unpaid orde
 - Feature only works for unpaid orders
 - Once an order is paid or cancelled, customers must create a new order
 - Highlighting helps restaurant staff identify last-minute additions
-- Compatible with existing order editing functionality
+- Compatible with existing order editing functionality 
